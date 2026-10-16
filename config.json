@@ -1,0 +1,65 @@
+{
+  "stations": [
+    {
+      "name": "Synthwave City FM - New",
+      "url": "https://synthwave-rex.radioca.st/stream"
+    },
+    {
+      "name": "Smooth Chill",
+      "url": "https://media-ssl.musicradio.com/ChillMP3"
+    },
+    {
+      "name": "Radio Record Synthwave",
+      "url": "http://radiorecord.hostingradio.ru/synth96.aacp"
+    },
+    {
+      "name": "Synthwave Neon City laut.fm",
+      "url": "https://stream.laut.fm/synthwave"
+    },
+    {
+      "name": "Laut.fm House Beatz and Waves",
+      "url": "http://stream.laut.fm/house_beatz_and_waves"
+    },
+    {
+      "name": "Laut.fm Vaporwave",
+      "url": "http://stream.laut.fm/vaporwave.m3u"
+    },
+    {
+      "name": "ABC News Radio MP3",
+      "url": "http://www.abc.net.au/res/streaming/audio/mp3/news_radio.pls"
+    },
+    {
+      "name": "Радио Sputnik (новости) / Radio Sputnik (news)",
+      "url": "https://icecast-rian.cdnvideo.ru/voicerus"
+    },
+    {
+      "name": "Wired FM - FM 99.9 - Limerick, Ireland",
+      "url": "https://s2.radio.co/sf0986595a/listen"
+    },
+    {
+      "name": "KSKO-FM 89.5 McGrath, AK  (MP3 Stream)",
+      "url": "https://ksko.streamguys1.com/live"
+    },
+    {
+      "name": "790 AM - KCAM Glennallen Alaska",
+      "url": "https://streams.radiomast.io/kcam"
+    },
+    {
+      "name": "Flashback 60s",
+      "url": "https://ice-11.spilarinn.is/60flashback"
+    },
+    {
+      "name": "радио Минск 92.4",
+      "url": "https://radio.mk.by:8443/radiominsk"
+    },
+    {
+      "name": "Радио Минская Волна 97.4 FM",
+      "url": "https://stream2.datacenter.by/mvradio"
+    },
+    {
+      "name": "Русское радио Минск 98.9 FM",
+      "url": "https://stream.rusradio.by:8443/live128"
+    }
+  ],
+  "mpv_path": "mpv"
+}
