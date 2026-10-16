@@ -31,10 +31,10 @@ var radioBrowserURLs = []string{
 	"https://all.api.radio-browser.info/json/stations?limit=100000&hidebroken=true",
 }
 
-const userAgent = "radiocli-go/1.0"
+const userAgent = "radiocli/1.0"
 
-// stationDBCachePath returns where the downloaded list is cached.
-// RADIOCLI_DB overrides the location.
+// stationDBCachePath returns where the downloaded list is cached, alongside
+// config.json in ~/.config/radiocli. RADIOCLI_DB overrides the location.
 func stationDBCachePath() string {
 	if override := os.Getenv("RADIOCLI_DB"); override != "" {
 		if abs, err := filepath.Abs(override); err == nil {
@@ -42,7 +42,7 @@ func stationDBCachePath() string {
 		}
 		return override
 	}
-	if dir, err := os.UserCacheDir(); err == nil {
+	if dir, err := os.UserConfigDir(); err == nil {
 		return filepath.Join(dir, "radiocli", "allStations.json")
 	}
 	return "allStations.json"

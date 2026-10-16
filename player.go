@@ -64,7 +64,7 @@ var observedProperties = []observedProperty{
 func newPlayer(mpvPath string) (*player, error) {
 	p := &player{
 		mpvPath:    mpvPath,
-		socketPath: fmt.Sprintf("/tmp/radio-cli-%d.sock", os.Getuid()),
+		socketPath: controlSocketPath(),
 		idle:       true,
 		waitDone:   make(chan struct{}),
 	}
@@ -257,10 +257,6 @@ func (p *player) togglePause() {
 
 func (p *player) stop() {
 	p.send([]any{"stop"})
-}
-
-func (p *player) seek(seconds float64) {
-	p.send([]any{"seek", seconds, "relative"})
 }
 
 func (p *player) snapshot() playerSnapshot {

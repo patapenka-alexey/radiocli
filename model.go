@@ -283,10 +283,6 @@ func (m *model) handleNavKey(key tea.Key) tea.Cmd {
 		} else {
 			m.pl.togglePause()
 		}
-	case tea.KeyLeft:
-		m.seek(-10)
-	case tea.KeyRight:
-		m.seek(10)
 	}
 
 	text := key.Text
@@ -314,13 +310,6 @@ func (m *model) handleNavKey(key tea.Key) tea.Cmd {
 		m.deleteSelected()
 	}
 	return nil
-}
-
-func (m *model) seek(seconds float64) {
-	if m.pl.snapshot().Idle {
-		return
-	}
-	m.pl.seek(seconds)
 }
 
 func isPrintable(text string) bool {
@@ -438,9 +427,9 @@ func separatorLine(leftWidth, width int) string {
 		return ""
 	}
 	if leftWidth >= width {
-		return style(ansiDim, strings.Repeat("─", width))
+		return strings.Repeat("─", width)
 	}
-	return style(ansiDim, strings.Repeat("─", leftWidth)+"┼"+strings.Repeat("─", width-leftWidth-1))
+	return strings.Repeat("─", leftWidth) + "┼" + strings.Repeat("─", width-leftWidth-1)
 }
 
 func (m *model) stationListLines(rows, leftWidth int) []string {
@@ -646,11 +635,10 @@ func (m *model) footerLines(width, count int) []string {
 	}
 
 	hints := hotkeyHints([][2]string{
-		{"↑/↓", "move"},
+		{"↑/↓ j/k", "move"},
 		{"Enter", "play"},
 		{"Space", "pause"},
 		{"s", "stop"},
-		{"←/→", "seek"},
 		{"/", "search"},
 		{"u", "update"},
 		{"d", "delete"},
