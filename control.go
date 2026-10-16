@@ -12,7 +12,7 @@ import (
 // controlSocketPath is the mpv JSON IPC socket shared by the running instance
 // and the remote-control commands.
 func controlSocketPath() string {
-	return fmt.Sprintf("/tmp/radio-cli-%d.sock", os.Getuid())
+	return fmt.Sprintf("/tmp/radiocli-%d.sock", os.Getuid())
 }
 
 // runControl handles the remote-control subcommands. It talks to the mpv
@@ -32,7 +32,7 @@ func runControl(args []string) error {
 func sendControlCommand(command []any) error {
 	conn, err := net.DialTimeout("unix", controlSocketPath(), 2*time.Second)
 	if err != nil {
-		return fmt.Errorf("radio-cli is not running")
+		return fmt.Errorf("radiocli is not running")
 	}
 	defer conn.Close()
 

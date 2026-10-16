@@ -1,2 +1,7 @@
 radiocli
 vendor/
+
+# Ignore Vim swap files
+*.swp
+*.swo
+*~

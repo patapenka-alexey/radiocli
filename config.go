@@ -35,7 +35,7 @@ func defaultStations() []Station {
 	}
 }
 
-// config mirrors the JSON file stored next to the application.
+// config mirrors the JSON file stored at ~/.config/radiocli/config.json.
 type config struct {
 	Stations []Station `json:"stations"`
 	MpvPath  string    `json:"mpv_path"`
@@ -43,8 +43,9 @@ type config struct {
 	path string
 }
 
-// configPath returns the location of config.json. The file lives in the same
-// folder as the application binary. RADIOCLI_CONFIG overrides the location.
+// configPath returns the location of config.json. It defaults to
+// ~/.config/radiocli/config.json, following $XDG_CONFIG_HOME; RADIOCLI_CONFIG
+// overrides the location.
 func configPath() string {
 	if override := os.Getenv("RADIOCLI_CONFIG"); override != "" {
 		if abs, err := filepath.Abs(override); err == nil {
@@ -52,14 +53,8 @@ func configPath() string {
 		}
 		return override
 	}
-	if exe, err := os.Executable(); err == nil {
-		dir := filepath.Dir(exe)
-		if !strings.Contains(dir, "go-build") {
-			return filepath.Join(dir, "config.json")
-		}
-	}
-	if wd, err := os.Getwd(); err == nil {
-		return filepath.Join(wd, "config.json")
+	if dir, err := os.UserConfigDir(); err == nil {
+		return filepath.Join(dir, "radiocli", "config.json")
 	}
 	return "config.json"
 }
