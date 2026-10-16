@@ -45,6 +45,20 @@ go run .
 | `d` | Delete the selected station (asks for confirmation) |
 | `q` / `Ctrl+C` | Quit |
 
+## Remote control
+
+The running instance opens an mpv JSON IPC socket, so you can pause and resume
+playback from another terminal without touching the UI:
+
+```sh
+radiocli pause      # pause the running instance
+radiocli unpause    # resume it
+```
+
+The commands are silent on success and exit non-zero with an error if no
+`radiocli` instance is running. The UI updates immediately, since it observes
+mpv's `pause` property.
+
 ## Configuration
 
 The station list and mpv path are stored in `config.json`, in the same
@@ -89,6 +103,7 @@ returns no results.
 | `config.go` | Configuration load/save and station management |
 | `stations.go` | radio-browser.info station database (fetch, cache, search) |
 | `player.go` | mpv JSON IPC controller |
+| `control.go` | Remote-control subcommands (`pause` / `unpause`) |
 
 ## Not implemented (relative to the applet)
 

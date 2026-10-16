@@ -64,7 +64,7 @@ var observedProperties = []observedProperty{
 func newPlayer(mpvPath string) (*player, error) {
 	p := &player{
 		mpvPath:    mpvPath,
-		socketPath: fmt.Sprintf("/tmp/radio-cli-%d.sock", os.Getuid()),
+		socketPath: controlSocketPath(),
 		idle:       true,
 		waitDone:   make(chan struct{}),
 	}

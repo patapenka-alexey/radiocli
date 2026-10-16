@@ -8,6 +8,14 @@ import (
 )
 
 func main() {
+	if args := os.Args[1:]; len(args) > 0 {
+		if err := runControl(args); err != nil {
+			fmt.Fprintf(os.Stderr, "radio-cli: %v\n", err)
+			os.Exit(1)
+		}
+		return
+	}
+
 	cfg := loadConfig()
 	db := loadStationDB()
 
