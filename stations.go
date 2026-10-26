@@ -97,6 +97,7 @@ func (db *stationDB) refresh() error {
 	db.mu.Lock()
 	db.err = fmt.Sprintf("Failed to fetch station database: %v", lastErr)
 	db.mu.Unlock()
+
 	return lastErr
 }
 
@@ -105,6 +106,7 @@ func fetchStations(client *http.Client, url string) ([]Station, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	req.Header.Set("User-Agent", userAgent)
 
 	resp, err := client.Do(req)
@@ -127,12 +129,14 @@ func fetchStations(client *http.Client, url string) ([]Station, error) {
 
 	seen := make(map[Station]bool, len(raw))
 	entries := make([]Station, 0, len(raw))
+
 	for _, s := range raw {
 		name := strings.TrimSpace(s.Name)
 		url := strings.TrimSpace(s.URL)
 		if name == "" || len(name) > 200 || len(url) > 200 {
 			continue
 		}
+
 		station := Station{Name: name, URL: url}
 		if seen[station] {
 			continue
@@ -142,12 +146,14 @@ func fetchStations(client *http.Client, url string) ([]Station, error) {
 	}
 
 	sort.Slice(entries, func(i, j int) bool { return entries[i].Name < entries[j].Name })
+
 	return entries, nil
 }
 
 func (db *stationDB) save() error {
 	db.mu.RLock()
 	raw := make([][2]string, len(db.entries))
+
 	for i, s := range db.entries {
 		raw[i] = [2]string{s.Name, s.URL}
 	}
@@ -161,10 +167,12 @@ func (db *stationDB) save() error {
 	if err := os.MkdirAll(filepath.Dir(db.path), 0o755); err != nil {
 		return err
 	}
+
 	tmp := db.path + ".tmp"
 	if err := os.WriteFile(tmp, data, 0o644); err != nil {
 		return err
 	}
+
 	return os.Rename(tmp, db.path)
 }
 
@@ -203,5 +211,6 @@ func (db *stationDB) search(query string, limit int) []Station {
 			}
 		}
 	}
+
 	return results
 }

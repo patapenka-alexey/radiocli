@@ -54,14 +54,17 @@ func sendControlCommand(command []any) error {
 		if err != nil {
 			return err
 		}
+
 		var msg map[string]any
 		if json.Unmarshal(line, &msg) != nil {
 			continue
 		}
+
 		id, ok := msg["request_id"].(float64)
 		if !ok || int(id) != 1 {
 			continue
 		}
+
 		if msg["error"] == "success" {
 			return nil
 		}

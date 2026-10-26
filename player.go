@@ -68,9 +68,11 @@ func newPlayer(mpvPath string) (*player, error) {
 		idle:       true,
 		waitDone:   make(chan struct{}),
 	}
+
 	if err := p.start(); err != nil {
 		return nil, err
 	}
+
 	return p, nil
 }
 
@@ -114,6 +116,7 @@ func (p *player) start() error {
 	for _, obs := range observedProperties {
 		p.send([]any{"observe_property", obs.id, obs.name})
 	}
+
 	return nil
 }
 
@@ -126,6 +129,7 @@ func (p *player) removeStaleSocket() {
 func (p *player) connectWithRetry() (net.Conn, error) {
 	deadline := time.Now().Add(5 * time.Second)
 	var lastErr error
+
 	for time.Now().Before(deadline) {
 		p.mu.Lock()
 		exited := p.exited
@@ -141,9 +145,11 @@ func (p *player) connectWithRetry() (net.Conn, error) {
 		lastErr = err
 		time.Sleep(50 * time.Millisecond)
 	}
+
 	if lastErr == nil {
 		lastErr = fmt.Errorf("timed out")
 	}
+
 	return nil, fmt.Errorf("could not connect to mpv IPC socket: %w", lastErr)
 }
 
@@ -158,6 +164,7 @@ func (p *player) readLoop() {
 			break
 		}
 	}
+
 	p.mu.Lock()
 	p.exited = true
 	p.mu.Unlock()
@@ -168,9 +175,11 @@ func (p *player) handleLine(line []byte) {
 	if err := json.Unmarshal(line, &msg); err != nil {
 		return
 	}
+
 	if msg["event"] != "property-change" {
 		return
 	}
+
 	name, _ := msg["name"].(string)
 	p.applyProperty(name, msg["data"])
 }
@@ -239,12 +248,14 @@ func (p *player) send(command []any) {
 	if err != nil {
 		return
 	}
+
 	data = append(data, '\n')
 	_, _ = p.conn.Write(data)
 }
 
 func (p *player) play(url string) {
 	p.send([]any{"loadfile", url, "replace"})
+
 	p.mu.Lock()
 	p.idle = false
 	p.paused = false
@@ -295,5 +306,6 @@ func (p *player) quit() {
 			<-p.waitDone
 		}
 	}
+
 	p.removeStaleSocket()
 }

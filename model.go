@@ -6,7 +6,7 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"charm.land/bubbletea/v2"
+	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
 )
 
@@ -69,6 +69,7 @@ func (m *model) startRefresh() tea.Cmd {
 	if m.refreshing {
 		return nil
 	}
+
 	m.refreshing = true
 	m.flash("Updating station list...", 30*time.Second)
 	return fetchStationsCmd(m.db)
@@ -76,9 +77,11 @@ func (m *model) startRefresh() tea.Cmd {
 
 func (m *model) Init() tea.Cmd {
 	cmds := []tea.Cmd{tickCmd()}
+
 	if !m.db.available() {
 		cmds = append(cmds, m.startRefresh())
 	}
+
 	return tea.Batch(cmds...)
 }
 
@@ -94,6 +97,7 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case stationsRefreshedMsg:
 		m.refreshing = false
+
 		if msg.err != nil {
 			m.flash("Station list update failed", 5*time.Second)
 		} else {
@@ -102,6 +106,7 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.updateSearch()
 			}
 		}
+
 		return m, nil
 
 	case tickMsg:
@@ -109,16 +114,20 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.mpvExitNotified = true
 			m.flash("mpv exited unexpectedly", 10*time.Second)
 		}
+
 		return m, tickCmd()
 	}
+
 	return m, nil
 }
 
 func (m *model) View() tea.View {
 	content, cursor := m.render()
+
 	v := tea.NewView(content)
 	v.AltScreen = true
 	v.Cursor = cursor
+
 	return v
 }
 
@@ -133,14 +142,17 @@ func (m *model) activeMessage() string {
 	if time.Now().Before(m.messageUntil) {
 		return m.message
 	}
+
 	return ""
 }
 
 func (m *model) playStation(name, url string) {
 	if !m.pl.isAlive() {
 		m.flash("mpv is not running", 5*time.Second)
+
 		return
 	}
+
 	m.currentStation = name
 	m.pl.play(url)
 }
@@ -149,6 +161,7 @@ func (m *model) playSelectedStation() {
 	if len(m.cfg.Stations) == 0 {
 		return
 	}
+
 	s := m.cfg.Stations[m.stationIndex]
 	m.playStation(s.Name, s.URL)
 }
@@ -157,6 +170,7 @@ func (m *model) playSelectedSearch() {
 	if len(m.searchResults) == 0 {
 		return
 	}
+
 	s := m.searchResults[m.searchIndex]
 	m.playStation(s.Name, s.URL)
 }
@@ -165,11 +179,14 @@ func (m *model) addSelectedSearch() {
 	if len(m.searchResults) == 0 {
 		return
 	}
+
 	s := m.searchResults[m.searchIndex]
 	if err := m.cfg.addStation(s.Name, s.URL); err != nil {
 		m.flash(err.Error(), 5*time.Second)
+
 		return
 	}
+
 	_ = m.cfg.save()
 	m.flash(fmt.Sprintf("Added '%s' to My Stations", s.Name), 3*time.Second)
 }
@@ -178,6 +195,7 @@ func (m *model) deleteSelected() {
 	if len(m.cfg.Stations) == 0 {
 		return
 	}
+
 	m.pendingDelete = m.cfg.Stations[m.stationIndex].Name
 }
 
@@ -187,14 +205,17 @@ func (m *model) confirmDelete(yes bool) {
 	if name == "" || !yes {
 		return
 	}
+
 	m.cfg.removeStation(name)
 	_ = m.cfg.save()
+
 	if name == m.currentStation {
 		m.currentStation = ""
 	}
 	if m.stationIndex > len(m.cfg.Stations)-1 {
 		m.stationIndex = max(0, len(m.cfg.Stations)-1)
 	}
+
 	m.flash(fmt.Sprintf("Removed '%s'", name), 3*time.Second)
 }
 
@@ -215,6 +236,7 @@ func (m *model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 	if msg.String() == "ctrl+c" {
 		return tea.Quit
 	}
+
 	key := msg.Key()
 
 	if m.pendingDelete != "" {
@@ -343,6 +365,7 @@ func truncate(s string, width int) string {
 	if width <= 0 {
 		return ""
 	}
+
 	return ansi.Truncate(s, width, "")
 }
 
@@ -415,10 +438,12 @@ func composeRow(left, right []string, i, width int) string {
 	if i < len(left) {
 		leftCell = left[i]
 	}
+
 	rightCell := ""
 	if i < len(right) {
 		rightCell = right[i]
 	}
+
 	return truncate(leftCell+"│  "+rightCell, width)
 }
 
@@ -440,6 +465,7 @@ func (m *model) stationListLines(rows, leftWidth int) []string {
 	if visible < 0 {
 		visible = 0
 	}
+
 	if index < offset {
 		offset = index
 	} else if index >= offset+visible {
@@ -452,11 +478,13 @@ func (m *model) stationListLines(rows, leftWidth int) []string {
 
 	left := make([]string, rows)
 	left[0] = style(ansiCyan, padRight(" Stations", leftWidth))
+
 	for row := 0; row < visible && row < rows-1; row++ {
 		itemIdx := offset + row
 		if itemIdx >= len(items) {
 			break
 		}
+
 		name := items[itemIdx].Name
 		marker := "  "
 		line := marker + name
@@ -477,6 +505,7 @@ func (m *model) stationListLines(rows, leftWidth int) []string {
 		}
 		left[1+row] = line
 	}
+
 	for i := range left {
 		if left[i] == "" {
 			left[i] = strings.Repeat(" ", leftWidth)
@@ -522,6 +551,7 @@ func (m *model) searchPanelLines(rows, width int) []string {
 		if itemIdx >= len(items) {
 			break
 		}
+
 		line := "  " + items[itemIdx].Name
 		if itemIdx == index {
 			line = style(ansiReverse, padRight(line, width))
@@ -559,6 +589,7 @@ func (m *model) nowPlayingLines() []string {
 	if station == "" {
 		station = "-"
 	}
+
 	title := snap.Title
 	if title == "" {
 		title = "-"
@@ -576,6 +607,7 @@ func (m *model) nowPlayingLines() []string {
 	if snap.HasTimePos {
 		pos = fmtTime(snap.TimePos)
 	}
+
 	timeText := "--:--"
 	switch {
 	case snap.HasDuration:

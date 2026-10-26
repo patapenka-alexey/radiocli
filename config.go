@@ -51,11 +51,14 @@ func configPath() string {
 		if abs, err := filepath.Abs(override); err == nil {
 			return abs
 		}
+
 		return override
 	}
+
 	if dir, err := os.UserConfigDir(); err == nil {
 		return filepath.Join(dir, "radiocli", "config.json")
 	}
+
 	return "config.json"
 }
 
@@ -68,6 +71,7 @@ func loadConfig() *config {
 			Stations []Station `json:"stations"`
 			MpvPath  *string   `json:"mpv_path"`
 		}
+
 		if json.Unmarshal(data, &raw) == nil {
 			cfg.Stations = raw.Stations
 			if raw.MpvPath != nil && *raw.MpvPath != "" {
@@ -79,6 +83,7 @@ func loadConfig() *config {
 	if len(cfg.Stations) == 0 {
 		cfg.Stations = defaultStations()
 	}
+
 	return cfg
 }
 
@@ -90,6 +95,7 @@ func (c *config) addStation(name, url string) error {
 	if name == "" || url == "" {
 		return errors.New("Station must have a name and a url")
 	}
+
 	for _, s := range c.Stations {
 		if s.URL == url {
 			return fmt.Errorf("Another station (%s) already uses this url", s.Name)
@@ -98,17 +104,21 @@ func (c *config) addStation(name, url string) error {
 			return fmt.Errorf("A station named '%s' already exists. Rename the station.", name)
 		}
 	}
+
 	c.Stations = append(c.Stations, Station{Name: name, URL: url})
+
 	return nil
 }
 
 func (c *config) removeStation(name string) {
 	filtered := c.Stations[:0]
+
 	for _, s := range c.Stations {
 		if s.Name != name {
 			filtered = append(filtered, s)
 		}
 	}
+
 	c.Stations = filtered
 }
 
@@ -125,15 +135,19 @@ func (c *config) save() error {
 	if err != nil {
 		return err
 	}
+
 	enc := json.NewEncoder(f)
 	enc.SetEscapeHTML(false)
 	enc.SetIndent("", "  ")
+
 	if err := enc.Encode(c); err != nil {
 		f.Close()
 		return err
 	}
+
 	if err := f.Close(); err != nil {
 		return err
 	}
+
 	return os.Rename(tmp, c.path)
 }
