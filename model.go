@@ -233,8 +233,11 @@ func (m *model) updateSearch() {
 // -- input ------------------------------------------------------------------
 
 func (m *model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
-	if msg.String() == "ctrl+c" {
+	switch msg.String() {
+	case "ctrl+c":
 		return tea.Quit
+	case "ctrl+z":
+		return tea.Suspend
 	}
 
 	key := msg.Key()
