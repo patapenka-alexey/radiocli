@@ -45,6 +45,7 @@ type model struct {
 	message         string
 	messageUntil    time.Time
 	pendingDelete   string
+	pendingQuit     bool
 	mpvExitNotified bool
 	refreshing      bool
 }
@@ -199,6 +200,15 @@ func (m *model) deleteSelected() {
 	m.pendingDelete = m.cfg.Stations[m.stationIndex].Name
 }
 
+func (m *model) confirmQuit(yes bool) tea.Cmd {
+	m.pendingQuit = false
+	if yes {
+		return tea.Quit
+	}
+
+	return nil
+}
+
 func (m *model) confirmDelete(yes bool) {
 	name := m.pendingDelete
 	m.pendingDelete = ""
@@ -233,15 +243,25 @@ func (m *model) updateSearch() {
 // -- input ------------------------------------------------------------------
 
 func (m *model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
-	switch msg.String() {
-	case "ctrl+c":
-		return tea.Quit
-	case "ctrl+z":
-		return tea.Suspend
+	key := msg.Key()
+
+	if key.Text == "" && key.Mod&(tea.ModCtrl|tea.ModAlt|tea.ModMeta|tea.ModSuper|tea.ModHyper) != 0 {
+		switch msg.String() {
+		case "ctrl+c":
+			m.pendingQuit = true
+		case "ctrl+z":
+			return tea.Suspend
+		}
+		return nil
 	}
 
-	key := msg.Key()
-	if key.Text == "" && key.Mod&(tea.ModCtrl|tea.ModAlt|tea.ModMeta|tea.ModSuper|tea.ModHyper) != 0 {
+	if m.pendingQuit {
+		switch key.Code {
+		case 'y', 'Y':
+			return m.confirmQuit(true)
+		case 'n', 'N', tea.KeyEscape:
+			return m.confirmQuit(false)
+		}
 		return nil
 	}
 
@@ -320,7 +340,7 @@ func (m *model) handleNavKey(key tea.Key) tea.Cmd {
 
 	switch strings.ToLower(text) {
 	case "q":
-		return tea.Quit
+		m.pendingQuit = true
 	case "k":
 		m.moveStation(-1)
 	case "j":
@@ -387,8 +407,9 @@ func (m *model) render() (string, *tea.Cursor) {
 	}
 
 	leftWidth := max(30, w/2)
+	confirming := m.pendingDelete != "" || m.pendingQuit
 	footerRows := 1
-	if m.pendingDelete != "" {
+	if confirming {
 		footerRows = 2
 	}
 	bodyTop := 0
@@ -403,7 +424,7 @@ func (m *model) render() (string, *tea.Cursor) {
 	lines = append(lines, m.footerLines(w, footerRows)...)
 
 	var cursor *tea.Cursor
-	if m.mode == modeSearch && m.pendingDelete == "" {
+	if m.mode == modeSearch && !confirming {
 		x := leftWidth + 3 + runeLen(searchPrompt(m.searchQuery))
 		y := bodyTop + 2
 		cursor = tea.NewCursor(min(x, w-1), y)
@@ -649,6 +670,11 @@ func fmtTime(seconds float64) string {
 
 func (m *model) footerLines(width, count int) []string {
 	lines := make([]string, count)
+
+	if m.pendingQuit {
+		lines[0] = style(ansiCyan, padRight("Quit radiocli? (y/N)", width))
+		return lines
+	}
 
 	if m.pendingDelete != "" {
 		prompt := fmt.Sprintf("Delete '%s'? (y/N)", m.pendingDelete)
