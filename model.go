@@ -241,6 +241,9 @@ func (m *model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 	}
 
 	key := msg.Key()
+	if key.Text == "" && key.Mod&(tea.ModCtrl|tea.ModAlt|tea.ModMeta|tea.ModSuper|tea.ModHyper) != 0 {
+		return nil
+	}
 
 	if m.pendingDelete != "" {
 		switch key.Code {

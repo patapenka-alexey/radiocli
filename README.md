@@ -55,6 +55,7 @@ run `make` first. Install path can be changed with
 | `Esc` | (in search) Cancel search |
 | `u` | Update the station database from radio-browser.info |
 | `d` | Delete the selected station (asks for confirmation) |
+| `Ctrl+Z` | Suspend (playback keeps running) |
 | `q` / `Ctrl+C` | Quit |
 
 ## Remote control

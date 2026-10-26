@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"sync"
+	"syscall"
 	"time"
 )
 
@@ -89,6 +90,7 @@ func (p *player) start() error {
 	}
 
 	cmd := exec.Command(p.mpvPath, args...)
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true, Pdeathsig: syscall.SIGTERM}
 	if err := cmd.Start(); err != nil {
 		return fmt.Errorf("mpv executable not found at '%s'", p.mpvPath)
 	}
