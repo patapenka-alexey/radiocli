@@ -6,6 +6,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
+	"radiocli/internal/app"
 	"radiocli/internal/catalog"
 	"radiocli/internal/config"
 	"radiocli/internal/control"
@@ -34,7 +35,8 @@ func main() {
 		os.Exit(1)
 	}
 
-	prog := tea.NewProgram(tui.NewModel(cfg, db, pl))
+	svc := app.New(cfg, db, pl)
+	prog := tea.NewProgram(tui.NewModel(svc))
 	if _, err := prog.Run(); err != nil {
 		fmt.Fprintf(os.Stderr, "radiocli: %v\n", err)
 	}

@@ -9,7 +9,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
 
-	"radiocli/internal/ports"
+	"radiocli/internal/app"
 	"radiocli/internal/station"
 )
 
@@ -28,18 +28,15 @@ type stationsRefreshedMsg struct {
 
 // Model is the Bubble Tea model for the radiocli TUI.
 type Model struct {
-	cfg ports.StationStore
-	db  ports.Catalog
-	pl  ports.Player
+	app *app.Service
 
 	width  int
 	height int
 
 	mode mode
 
-	stationIndex   int
-	stationOffset  int
-	currentStation string
+	stationIndex  int
+	stationOffset int
 
 	searchQuery   string
 	searchResults []station.Station
@@ -54,9 +51,9 @@ type Model struct {
 	refreshing      bool
 }
 
-// NewModel creates the TUI model with its dependencies.
-func NewModel(cfg ports.StationStore, db ports.Catalog, pl ports.Player) *Model {
-	return &Model{cfg: cfg, db: db, pl: pl}
+// NewModel creates the TUI model with the application service.
+func NewModel(svc *app.Service) *Model {
+	return &Model{app: svc}
 }
 
 func tickCmd() tea.Cmd {
@@ -65,9 +62,9 @@ func tickCmd() tea.Cmd {
 	})
 }
 
-func fetchStationsCmd(db ports.Catalog) tea.Cmd {
+func fetchStationsCmd(svc *app.Service) tea.Cmd {
 	return func() tea.Msg {
-		return stationsRefreshedMsg{err: db.Refresh()}
+		return stationsRefreshedMsg{err: svc.Refresh()}
 	}
 }
 
@@ -78,13 +75,13 @@ func (m *Model) startRefresh() tea.Cmd {
 
 	m.refreshing = true
 	m.flash("Updating station list...", 30*time.Second)
-	return fetchStationsCmd(m.db)
+	return fetchStationsCmd(m.app)
 }
 
 func (m *Model) Init() tea.Cmd {
 	cmds := []tea.Cmd{tickCmd()}
 
-	if !m.db.Available() {
+	if !m.app.CatalogAvailable() {
 		cmds = append(cmds, m.startRefresh())
 	}
 
@@ -114,7 +111,7 @@ func (m *Model) update(msg tea.Msg) tea.Cmd {
 		if msg.err != nil {
 			m.flash("Station list update failed", 5*time.Second)
 		} else {
-			m.flash(fmt.Sprintf("Station list updated (%d stations)", m.db.Count()), 3*time.Second)
+			m.flash(fmt.Sprintf("Station list updated (%d stations)", m.app.StationCount()), 3*time.Second)
 			if m.mode == modeSearch {
 				m.updateSearch()
 			}
@@ -123,7 +120,7 @@ func (m *Model) update(msg tea.Msg) tea.Cmd {
 		return nil
 
 	case tickMsg:
-		if !m.pl.Alive() && !m.mpvExitNotified {
+		if !m.app.Alive() && !m.mpvExitNotified {
 			m.mpvExitNotified = true
 			m.flash("mpv exited unexpectedly", 10*time.Second)
 		}
@@ -159,24 +156,19 @@ func (m *Model) activeMessage() string {
 	return ""
 }
 
-func (m *Model) playStation(name, url string) {
-	if !m.pl.Alive() {
-		m.flash("mpv is not running", 5*time.Second)
-
-		return
+func (m *Model) playStation(s station.Station) {
+	if err := m.app.Play(s); err != nil {
+		m.flash(err.Error(), 5*time.Second)
 	}
-
-	m.currentStation = name
-	m.pl.Play(url)
 }
 
 func (m *Model) playSelectedStation() {
-	if len(m.cfg.Stations()) == 0 {
+	stations := m.app.Stations()
+	if len(stations) == 0 {
 		return
 	}
 
-	s := m.cfg.Stations()[m.stationIndex]
-	m.playStation(s.Name, s.URL)
+	m.playStation(stations[m.stationIndex])
 }
 
 func (m *Model) playSelectedSearch() {
@@ -184,8 +176,7 @@ func (m *Model) playSelectedSearch() {
 		return
 	}
 
-	s := m.searchResults[m.searchIndex]
-	m.playStation(s.Name, s.URL)
+	m.playStation(m.searchResults[m.searchIndex])
 }
 
 func (m *Model) addSelectedSearch() {
@@ -194,22 +185,22 @@ func (m *Model) addSelectedSearch() {
 	}
 
 	s := m.searchResults[m.searchIndex]
-	if err := m.cfg.AddStation(s.Name, s.URL); err != nil {
+	if err := m.app.AddStation(s.Name, s.URL); err != nil {
 		m.flash(err.Error(), 5*time.Second)
 
 		return
 	}
 
-	_ = m.cfg.Save()
 	m.flash(fmt.Sprintf("Added '%s' to My Stations", s.Name), 3*time.Second)
 }
 
 func (m *Model) deleteSelected() {
-	if len(m.cfg.Stations()) == 0 {
+	stations := m.app.Stations()
+	if len(stations) == 0 {
 		return
 	}
 
-	m.pendingDelete = m.cfg.Stations()[m.stationIndex].Name
+	m.pendingDelete = stations[m.stationIndex].Name
 }
 
 func (m *Model) confirmQuit(yes bool) tea.Cmd {
@@ -228,26 +219,27 @@ func (m *Model) confirmDelete(yes bool) {
 		return
 	}
 
-	m.cfg.RemoveStation(name)
-	_ = m.cfg.Save()
+	if err := m.app.RemoveStation(name); err != nil {
+		m.flash(err.Error(), 5*time.Second)
 
-	if name == m.currentStation {
-		m.currentStation = ""
+		return
 	}
-	if m.stationIndex > len(m.cfg.Stations())-1 {
-		m.stationIndex = max(0, len(m.cfg.Stations())-1)
+
+	stations := m.app.Stations()
+	if m.stationIndex > len(stations)-1 {
+		m.stationIndex = max(0, len(stations)-1)
 	}
 
 	m.flash(fmt.Sprintf("Removed '%s'", name), 3*time.Second)
 }
 
 func (m *Model) moveStation(delta int) {
-	last := len(m.cfg.Stations()) - 1
+	last := len(m.app.Stations()) - 1
 	m.stationIndex = min(max(0, last), max(0, m.stationIndex+delta))
 }
 
 func (m *Model) updateSearch() {
-	m.searchResults = m.db.Search(m.searchQuery, 200)
+	m.searchResults = m.app.Search(m.searchQuery, 200)
 	m.searchIndex = 0
 	m.searchOffset = 0
 }
@@ -338,10 +330,10 @@ func (m *Model) handleNavKey(key tea.Key) tea.Cmd {
 	case tea.KeyEnter:
 		m.playSelectedStation()
 	case tea.KeySpace:
-		if m.pl.Status().Idle {
+		if m.app.Status().Idle {
 			m.playSelectedStation()
 		} else {
-			m.pl.TogglePause()
+			m.app.TogglePause()
 		}
 	}
 
@@ -358,8 +350,7 @@ func (m *Model) handleNavKey(key tea.Key) tea.Cmd {
 	case "j":
 		m.moveStation(1)
 	case "s":
-		m.pl.Stop()
-		m.currentStation = ""
+		m.app.Stop()
 	case "/":
 		m.mode = modeSearch
 		m.searchQuery = ""
@@ -455,7 +446,7 @@ func (m *Model) ensureVisible() {
 	}
 
 	l := m.layout()
-	m.stationOffset = clampOffset(m.stationIndex, m.stationOffset, l.stationVisible, len(m.cfg.Stations()))
+	m.stationOffset = clampOffset(m.stationIndex, m.stationOffset, l.stationVisible, len(m.app.Stations()))
 	m.searchOffset = clampOffset(m.searchIndex, m.searchOffset, l.searchVisible, len(m.searchResults))
 }
 
@@ -547,7 +538,7 @@ func separatorLine(leftWidth, width int) string {
 }
 
 func (m *Model) stationListLines(rows, leftWidth int) []string {
-	items := m.cfg.Stations()
+	items := m.app.Stations()
 	index, offset := m.stationIndex, m.stationOffset
 
 	visible := rows - 1
@@ -569,7 +560,7 @@ func (m *Model) stationListLines(rows, leftWidth int) []string {
 		line := marker + name
 		selected := itemIdx == index
 
-		if name == m.currentStation {
+		if name == m.app.CurrentStation() {
 			marker = "> "
 			line = marker + name
 			if selected {
@@ -642,7 +633,7 @@ func (m *Model) searchPanelLines(rows, width int) []string {
 }
 
 func (m *Model) nowPlayingLines() []string {
-	snap := m.pl.Status()
+	snap := m.app.Status()
 	playing := !snap.Idle && snap.Alive
 
 	status := "Stopped"
@@ -655,7 +646,7 @@ func (m *Model) nowPlayingLines() []string {
 		statusStyle = ansiCyan
 	}
 
-	stationName := m.currentStation
+	stationName := m.app.CurrentStation()
 	if stationName == "" {
 		stationName = "-"
 	}

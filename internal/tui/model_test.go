@@ -3,6 +3,7 @@ package tui
 import (
 	"testing"
 
+	"radiocli/internal/app"
 	"radiocli/internal/ports"
 	"radiocli/internal/station"
 )
@@ -44,11 +45,7 @@ func (fakePlayer) Alive() bool { return true }
 func (fakePlayer) Quit() {}
 
 func newTestModel(stations int) *Model {
-	return &Model{
-		cfg: &fakeStore{stations: make([]station.Station, stations)},
-		db:  fakeCatalog{},
-		pl:  fakePlayer{},
-	}
+	return NewModel(app.New(&fakeStore{stations: make([]station.Station, stations)}, fakeCatalog{}, fakePlayer{}))
 }
 
 func TestClampOffset(t *testing.T) {
@@ -89,7 +86,7 @@ func TestEnsureVisibleKeepsOffsetsInRange(t *testing.T) {
 
 	m.ensureVisible()
 
-	if m.stationOffset > len(m.cfg.Stations())-1 {
+	if m.stationOffset > len(m.app.Stations())-1 {
 		t.Fatalf("station offset %d out of range", m.stationOffset)
 	}
 	if got := m.stationOffset; got != 19-m.layout().stationVisible+1 {
