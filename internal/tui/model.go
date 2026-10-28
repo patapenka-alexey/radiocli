@@ -13,11 +13,13 @@ import (
 	"radiocli/internal/station"
 )
 
-type mode int
+type state int
 
 const (
-	modeNavigate mode = iota
-	modeSearch
+	stateNavigate state = iota
+	stateSearch
+	stateConfirmDelete
+	stateConfirmQuit
 )
 
 type tickMsg time.Time
@@ -33,7 +35,7 @@ type Model struct {
 	width  int
 	height int
 
-	mode mode
+	state state
 
 	stationIndex  int
 	stationOffset int
@@ -45,8 +47,8 @@ type Model struct {
 
 	message         string
 	messageUntil    time.Time
-	pendingDelete   string
-	pendingQuit     bool
+	confirmName     string
+	quitResume      state
 	mpvExitNotified bool
 	refreshing      bool
 }
@@ -112,7 +114,7 @@ func (m *Model) update(msg tea.Msg) tea.Cmd {
 			m.flash("Station list update failed", 5*time.Second)
 		} else {
 			m.flash(fmt.Sprintf("Station list updated (%d stations)", m.app.StationCount()), 3*time.Second)
-			if m.mode == modeSearch {
+			if m.state == stateSearch {
 				m.updateSearch()
 			}
 		}
@@ -194,28 +196,28 @@ func (m *Model) addSelectedSearch() {
 	m.flash(fmt.Sprintf("Added '%s' to My Stations", s.Name), 3*time.Second)
 }
 
-func (m *Model) deleteSelected() {
+func (m *Model) requestDelete() {
 	stations := m.app.Stations()
 	if len(stations) == 0 {
 		return
 	}
 
-	m.pendingDelete = stations[m.stationIndex].Name
+	m.confirmName = stations[m.stationIndex].Name
+	m.state = stateConfirmDelete
 }
 
-func (m *Model) confirmQuit(yes bool) tea.Cmd {
-	m.pendingQuit = false
-	if yes {
-		return tea.Quit
+func (m *Model) requestQuit() {
+	if m.state != stateConfirmQuit {
+		m.quitResume = m.state
 	}
-
-	return nil
+	m.state = stateConfirmQuit
 }
 
-func (m *Model) confirmDelete(yes bool) {
-	name := m.pendingDelete
-	m.pendingDelete = ""
-	if name == "" || !yes {
+func (m *Model) confirmDelete() {
+	name := m.confirmName
+	m.confirmName = ""
+	m.state = stateNavigate
+	if name == "" {
 		return
 	}
 
@@ -231,6 +233,15 @@ func (m *Model) confirmDelete(yes bool) {
 	}
 
 	m.flash(fmt.Sprintf("Removed '%s'", name), 3*time.Second)
+}
+
+func (m *Model) cancelDelete() {
+	m.confirmName = ""
+	m.state = stateNavigate
+}
+
+func (m *Model) cancelQuit() {
+	m.state = m.quitResume
 }
 
 func (m *Model) moveStation(delta int) {
@@ -252,47 +263,55 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 	if key.Text == "" && key.Mod&(tea.ModCtrl|tea.ModAlt|tea.ModMeta|tea.ModSuper|tea.ModHyper) != 0 {
 		switch msg.String() {
 		case "ctrl+c":
-			m.pendingQuit = true
+			m.requestQuit()
 		case "ctrl+z":
 			return tea.Suspend
 		}
 		return nil
 	}
 
-	if m.pendingQuit {
-		switch key.Code {
-		case 'y', 'Y':
-			return m.confirmQuit(true)
-		case 'n', 'N', tea.KeyEscape:
-			return m.confirmQuit(false)
-		}
-		return nil
-	}
-
-	if m.pendingDelete != "" {
-		switch key.Code {
-		case 'y', 'Y':
-			m.confirmDelete(true)
-		case 'n', 'N', tea.KeyEscape:
-			m.confirmDelete(false)
-		}
-		return nil
-	}
-
-	if m.mode == modeSearch {
+	switch m.state {
+	case stateConfirmQuit:
+		return m.handleConfirmQuitKey(key)
+	case stateConfirmDelete:
+		return m.handleConfirmDeleteKey(key)
+	case stateSearch:
 		return m.handleSearchKey(key)
+	default:
+		return m.handleNavKey(key)
 	}
-	return m.handleNavKey(key)
+}
+
+func (m *Model) handleConfirmQuitKey(key tea.Key) tea.Cmd {
+	switch key.Code {
+	case 'y', 'Y':
+		return tea.Quit
+	case 'n', 'N', tea.KeyEscape:
+		m.cancelQuit()
+	}
+
+	return nil
+}
+
+func (m *Model) handleConfirmDeleteKey(key tea.Key) tea.Cmd {
+	switch key.Code {
+	case 'y', 'Y':
+		m.confirmDelete()
+	case 'n', 'N', tea.KeyEscape:
+		m.cancelDelete()
+	}
+
+	return nil
 }
 
 func (m *Model) handleSearchKey(key tea.Key) tea.Cmd {
 	switch key.Code {
 	case tea.KeyEscape:
-		m.mode = modeNavigate
+		m.state = stateNavigate
 		return nil
 	case tea.KeyEnter:
 		m.playSelectedSearch()
-		m.mode = modeNavigate
+		m.state = stateNavigate
 		return nil
 	case tea.KeyUp:
 		m.searchIndex = max(0, m.searchIndex-1)
@@ -344,7 +363,7 @@ func (m *Model) handleNavKey(key tea.Key) tea.Cmd {
 
 	switch strings.ToLower(text) {
 	case "q":
-		m.pendingQuit = true
+		m.requestQuit()
 	case "k":
 		m.moveStation(-1)
 	case "j":
@@ -352,13 +371,13 @@ func (m *Model) handleNavKey(key tea.Key) tea.Cmd {
 	case "s":
 		m.app.Stop()
 	case "/":
-		m.mode = modeSearch
+		m.state = stateSearch
 		m.searchQuery = ""
 		m.updateSearch()
 	case "u":
 		return m.startRefresh()
 	case "d":
-		m.deleteSelected()
+		m.requestDelete()
 	}
 	return nil
 }
@@ -418,7 +437,7 @@ type layout struct {
 func (m *Model) layout() layout {
 	w, h := m.width, m.height
 	l := layout{width: w, height: h, leftWidth: max(30, w/2)}
-	l.confirming = m.pendingDelete != "" || m.pendingQuit
+	l.confirming = m.state == stateConfirmDelete || m.state == stateConfirmQuit
 	l.footerRows = 1
 	if l.confirming {
 		l.footerRows = 2
@@ -477,7 +496,7 @@ func (m *Model) render() (string, *tea.Cursor) {
 	lines = append(lines, m.footerLines(l.width, l.footerRows)...)
 
 	var cursor *tea.Cursor
-	if m.mode == modeSearch && !l.confirming {
+	if m.state == stateSearch && !l.confirming {
 		x := l.leftWidth + 3 + runeLen(searchPrompt(m.searchQuery))
 		y := 2
 		cursor = tea.NewCursor(min(x, l.width-1), y)
@@ -495,7 +514,7 @@ func (m *Model) bodyLines(rows, leftWidth, width int) []string {
 	left := m.stationListLines(contentRows, leftWidth)
 
 	var right []string
-	if m.mode == modeSearch {
+	if m.state == stateSearch {
 		right = m.searchPanelLines(contentRows, width-leftWidth-3)
 	} else {
 		right = m.nowPlayingLines()
@@ -705,18 +724,15 @@ func fmtTime(seconds float64) string {
 func (m *Model) footerLines(width, count int) []string {
 	lines := make([]string, count)
 
-	if m.pendingQuit {
+	switch m.state {
+	case stateConfirmQuit:
 		lines[0] = style(ansiCyan, padRight("Quit radiocli? (y/N)", width))
 		return lines
-	}
-
-	if m.pendingDelete != "" {
-		prompt := fmt.Sprintf("Delete '%s'? (y/N)", m.pendingDelete)
+	case stateConfirmDelete:
+		prompt := fmt.Sprintf("Delete '%s'? (y/N)", m.confirmName)
 		lines[0] = style(ansiCyan, padRight(prompt, width))
 		return lines
-	}
-
-	if m.mode == modeSearch {
+	case stateSearch:
 		hints := hotkeyHints([][2]string{
 			{"Enter", "play"},
 			{"a", "add"},

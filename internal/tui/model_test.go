@@ -16,7 +16,15 @@ func (f *fakeStore) Stations() []station.Station { return f.stations }
 
 func (f *fakeStore) AddStation(string, string) error { return nil }
 
-func (f *fakeStore) RemoveStation(string) {}
+func (f *fakeStore) RemoveStation(name string) {
+	filtered := f.stations[:0]
+	for _, s := range f.stations {
+		if s.Name != name {
+			filtered = append(filtered, s)
+		}
+	}
+	f.stations = filtered
+}
 
 func (f *fakeStore) Save() error { return nil }
 
@@ -46,6 +54,10 @@ func (fakePlayer) Quit() {}
 
 func newTestModel(stations int) *Model {
 	return NewModel(app.New(&fakeStore{stations: make([]station.Station, stations)}, fakeCatalog{}, fakePlayer{}))
+}
+
+func newTestModelWith(stations ...station.Station) *Model {
+	return NewModel(app.New(&fakeStore{stations: stations}, fakeCatalog{}, fakePlayer{}))
 }
 
 func TestClampOffset(t *testing.T) {
