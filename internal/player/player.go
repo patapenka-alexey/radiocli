@@ -128,6 +128,7 @@ func (p *MPV) start() error {
 		if cmd.Process != nil {
 			_ = cmd.Process.Kill()
 		}
+
 		return err
 	}
 	p.conn = conn
@@ -164,6 +165,7 @@ func (p *MPV) connectWithRetry() (net.Conn, error) {
 			return conn, nil
 		}
 		lastErr = err
+
 		time.Sleep(50 * time.Millisecond)
 	}
 
@@ -176,6 +178,7 @@ func (p *MPV) connectWithRetry() (net.Conn, error) {
 
 func (p *MPV) readLoop() {
 	reader := bufio.NewReader(p.conn)
+
 	for {
 		line, err := reader.ReadBytes('\n')
 		if len(bytes.TrimSpace(line)) > 0 {
@@ -189,6 +192,7 @@ func (p *MPV) readLoop() {
 	p.mu.Lock()
 	p.exited = true
 	p.mu.Unlock()
+
 	p.closeEvents()
 }
 
@@ -241,6 +245,7 @@ func (p *MPV) applyProperty(name string, value any) {
 
 func toBool(v any) bool {
 	b, _ := v.(bool)
+
 	return b
 }
 
@@ -252,6 +257,7 @@ func toFloat(v any) (float64, bool) {
 		return float64(n), true
 	case json.Number:
 		f, err := n.Float64()
+
 		return f, err == nil
 	default:
 		return 0, false
@@ -300,6 +306,7 @@ func (p *MPV) Stop() {
 func (p *MPV) Status() ports.PlayerStatus {
 	p.mu.Lock()
 	defer p.mu.Unlock()
+
 	return ports.PlayerStatus{
 		Title:       p.title,
 		Paused:      p.paused,
@@ -316,6 +323,7 @@ func (p *MPV) Status() ports.PlayerStatus {
 func (p *MPV) Alive() bool {
 	p.mu.Lock()
 	defer p.mu.Unlock()
+
 	return !p.exited && p.cmd != nil
 }
 
@@ -325,6 +333,7 @@ func (p *MPV) Quit() {
 		p.send([]any{"quit"})
 		_ = p.conn.Close()
 	}
+
 	if p.waitDone != nil {
 		select {
 		case <-p.waitDone:

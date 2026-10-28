@@ -40,6 +40,7 @@ func (f *fakeStore) RemoveStation(name string) {
 
 func (f *fakeStore) Save() error {
 	f.saveCalls++
+
 	return f.saveErr
 }
 
@@ -51,6 +52,7 @@ type fakeCatalog struct {
 
 func (f *fakeCatalog) Search(query string, limit int) []station.Station {
 	f.limited = limit
+
 	return f.results
 }
 
@@ -90,6 +92,7 @@ func TestPlaySetsCurrentStation(t *testing.T) {
 	if err := svc.Play(station.Station{Name: "Jazz", URL: "https://example.com/jazz"}); err != nil {
 		t.Fatalf("Play: %v", err)
 	}
+
 	if svc.CurrentStation() != "Jazz" {
 		t.Fatalf("CurrentStation() = %q, want Jazz", svc.CurrentStation())
 	}
@@ -103,6 +106,7 @@ func TestPlayFailsWhenPlayerIsGone(t *testing.T) {
 	svc := New(&fakeStore{}, &fakeCatalog{}, pl)
 
 	err := svc.Play(station.Station{Name: "Jazz", URL: "https://example.com/jazz"})
+
 	if !errors.Is(err, ErrPlayerNotRunning) {
 		t.Fatalf("Play error = %v, want ErrPlayerNotRunning", err)
 	}
@@ -138,6 +142,7 @@ func TestAddStationPersists(t *testing.T) {
 	if err := svc.AddStation("Jazz", "https://example.com/jazz"); err != nil {
 		t.Fatalf("AddStation: %v", err)
 	}
+
 	if store.saveCalls != 1 {
 		t.Fatalf("saveCalls = %d, want 1", store.saveCalls)
 	}
@@ -150,6 +155,7 @@ func TestAddStationDoesNotSaveOnValidationError(t *testing.T) {
 	if err := svc.AddStation("Jazz", "https://example.com/jazz"); err == nil {
 		t.Fatal("expected AddStation error")
 	}
+
 	if store.saveCalls != 0 {
 		t.Fatalf("saveCalls = %d, want 0", store.saveCalls)
 	}
@@ -163,9 +169,11 @@ func TestRemoveStationClearsCurrentAndPersists(t *testing.T) {
 	if err := svc.Play(store.stations[0]); err != nil {
 		t.Fatalf("Play: %v", err)
 	}
+
 	if err := svc.RemoveStation("Jazz"); err != nil {
 		t.Fatalf("RemoveStation: %v", err)
 	}
+
 	if svc.CurrentStation() != "" {
 		t.Fatalf("CurrentStation() = %q, want empty", svc.CurrentStation())
 	}

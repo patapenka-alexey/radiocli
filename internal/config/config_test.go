@@ -25,6 +25,7 @@ func TestSaveLoadRoundTrip(t *testing.T) {
 			found = true
 		}
 	}
+
 	if !found {
 		t.Fatalf("saved station not found after reload: %+v", stations)
 	}
@@ -63,6 +64,7 @@ func TestRemoveStation(t *testing.T) {
 
 	name := cfg.Stations()[0].Name
 	cfg.RemoveStation(name)
+
 	for _, s := range cfg.Stations() {
 		if s.Name == name {
 			t.Fatalf("station %q still present after removal", name)

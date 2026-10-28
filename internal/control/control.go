@@ -64,6 +64,7 @@ func sendCommand(command []any) error {
 		if msg["error"] == "success" {
 			return nil
 		}
+
 		return fmt.Errorf("mpv: %v", msg["error"])
 	}
 }

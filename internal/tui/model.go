@@ -93,6 +93,7 @@ func (m *Model) startRefresh() tea.Cmd {
 
 	m.refreshing = true
 	m.flash("Updating station list...", 30*time.Second)
+
 	return fetchStationsCmd(m.app)
 }
 
@@ -102,6 +103,7 @@ func (m *Model) Init() tea.Cmd {
 	if !m.app.CatalogAvailable() {
 		cmds = append(cmds, m.startRefresh())
 	}
+
 	if timer := m.flashTimer(); timer != nil {
 		cmds = append(cmds, timer)
 	}
@@ -125,6 +127,7 @@ func (m *Model) update(msg tea.Msg) tea.Cmd {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
+
 		return nil
 
 	case tea.KeyPressMsg:
@@ -263,6 +266,7 @@ func (m *Model) requestQuit() {
 	if m.state != stateConfirmQuit {
 		m.quitResume = m.state
 	}
+
 	m.state = stateConfirmQuit
 }
 
@@ -270,6 +274,7 @@ func (m *Model) confirmDelete() {
 	name := m.confirmName
 	m.confirmName = ""
 	m.state = stateNavigate
+
 	if name == "" {
 		return
 	}
@@ -316,6 +321,7 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 	if cmd, ok := globalKeyMap[token]; ok {
 		return m.execute(cmd)
 	}
+
 	if cmd, ok := m.resolveCommand(token); ok {
 		return m.execute(cmd)
 	}
@@ -336,6 +342,7 @@ func isPrintable(text string) bool {
 			return false
 		}
 	}
+
 	return utf8.RuneCountInString(text) > 0
 }
 
@@ -367,6 +374,7 @@ func truncate(s string, width int) string {
 
 func padRight(s string, width int) string {
 	s = truncate(s, width)
+
 	return s + strings.Repeat(" ", max(0, width-runeLen(s)))
 }
 
@@ -477,6 +485,7 @@ func (m *Model) bodyLines(rows, leftWidth, width int) []string {
 	for len(result) < rows {
 		result = append(result, strings.Repeat(" ", width))
 	}
+
 	return result
 }
 
@@ -501,6 +510,7 @@ func separatorLine(leftWidth, width int) string {
 	if leftWidth >= width {
 		return strings.Repeat("─", width)
 	}
+
 	return strings.Repeat("─", leftWidth) + "┼" + strings.Repeat("─", width-leftWidth-1)
 }
 
@@ -552,6 +562,7 @@ func (m *Model) stationListLines(rows, leftWidth int) []string {
 	if len(items) == 0 && rows > 1 {
 		left[1] = style(ansiDim, padRight(" No stations", leftWidth))
 	}
+
 	return left
 }
 
@@ -596,6 +607,7 @@ func (m *Model) searchPanelLines(rows, width int) []string {
 	if len(items) == 0 && rows > start {
 		lines[start] = style(ansiDim, padRight(" No matches", width))
 	}
+
 	return lines
 }
 
@@ -643,12 +655,14 @@ func (m *Model) nowPlayingLines() []string {
 	case playing:
 		timeText = pos + " (live)"
 	}
+
 	lines = append(lines, labelValue("Time", timeText, ""))
 
 	if !snap.Alive {
 		lines = append(lines, "")
 		lines = append(lines, style(ansiCyan, "mpv is not running"))
 	}
+
 	return lines
 }
 
@@ -660,12 +674,15 @@ func fmtTime(seconds float64) string {
 	if seconds < 0 {
 		seconds = 0
 	}
+
 	total := int(seconds)
 	minutes, secs := total/60, total%60
 	hours, minutes := minutes/60, minutes%60
+
 	if hours > 0 {
 		return fmt.Sprintf("%d:%02d:%02d", hours, minutes, secs)
 	}
+
 	return fmt.Sprintf("%02d:%02d", minutes, secs)
 }
 
@@ -675,10 +692,12 @@ func (m *Model) footerLines(width, count int) []string {
 	switch m.state {
 	case stateConfirmQuit:
 		lines[0] = style(ansiCyan, padRight("Quit radiocli? (y/N)", width))
+
 		return lines
 	case stateConfirmDelete:
 		prompt := fmt.Sprintf("Delete '%s'? (y/N)", m.confirmName)
 		lines[0] = style(ansiCyan, padRight(prompt, width))
+
 		return lines
 	case stateSearch:
 		hints := hotkeyHints([][2]string{
@@ -688,11 +707,13 @@ func (m *Model) footerLines(width, count int) []string {
 			{"Esc", "cancel"},
 		})
 		lines[0] = truncate(hints, width)
+
 		return lines
 	}
 
 	if msg := m.activeMessage(); msg != "" {
 		lines[0] = style(ansiCyan, padRight(msg, width))
+
 		return lines
 	}
 
@@ -707,6 +728,7 @@ func (m *Model) footerLines(width, count int) []string {
 		{"q", "quit"},
 	})
 	lines[0] = truncate(hints, width)
+
 	return lines
 }
 
@@ -715,5 +737,6 @@ func hotkeyHints(keys [][2]string) string {
 	for i, k := range keys {
 		parts[i] = style(ansiCyan, k[0]) + style(ansiDim, " "+k[1])
 	}
+
 	return strings.Join(parts, style(ansiDim, " · "))
 }

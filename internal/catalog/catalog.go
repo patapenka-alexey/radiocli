@@ -170,6 +170,7 @@ func (db *Repository) loadCache() {
 	var raw [][]any
 	if err := json.Unmarshal(data, &raw); err != nil {
 		db.err = fmt.Sprintf("Failed to load cached station database: %v", err)
+
 		return
 	}
 
@@ -228,12 +229,15 @@ func (db *Repository) Refresh() error {
 
 func (db *Repository) backoff(attempt int) time.Duration {
 	delay := db.retry.BaseDelay
+
 	for i := 1; i < attempt && delay < db.retry.MaxDelay; i++ {
 		delay *= 2
 	}
+
 	if delay > db.retry.MaxDelay {
 		delay = db.retry.MaxDelay
 	}
+
 	if delay <= 0 {
 		return 0
 	}
@@ -292,6 +296,7 @@ func (db *Repository) doFetch(url string) ([]station.Station, error) {
 		if seen[entry] {
 			continue
 		}
+
 		seen[entry] = true
 		entries = append(entries, entry)
 	}
@@ -331,6 +336,7 @@ func toStr(v any) string {
 	if s, ok := v.(string); ok {
 		return s
 	}
+
 	return fmt.Sprint(v)
 }
 
@@ -338,6 +344,7 @@ func toStr(v any) string {
 func (db *Repository) Count() int {
 	db.mu.RLock()
 	defer db.mu.RUnlock()
+
 	return len(db.entries)
 }
 

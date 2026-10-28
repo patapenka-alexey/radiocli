@@ -94,6 +94,7 @@ func (c *Store) AddStation(name, url string) error {
 		if s.URL == url {
 			return fmt.Errorf("Another station (%s) already uses this url", s.Name)
 		}
+
 		if s.Name == name {
 			return fmt.Errorf("A station named '%s' already exists. Rename the station.", name)
 		}
@@ -143,6 +144,7 @@ func (c *Store) Save() error {
 
 	if err := enc.Encode(file); err != nil {
 		f.Close()
+
 		return err
 	}
 

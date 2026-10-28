@@ -79,8 +79,8 @@ The station list and mpv path are stored in `config.json`, at
 `~/.config/radiocli/config.json` (following `$XDG_CONFIG_HOME`). Set
 `RADIOCLI_CONFIG` to use a different path.
 
-The file is only written when you add (`a`) or delete (`d`) a station; until
-then the in-memory defaults below are used. Example:
+The file is only written when you add (`Ctrl+A` while searching) or delete
+(`d`) a station; until then the in-memory defaults below are used. Example:
 
 ```json
 {
@@ -101,27 +101,49 @@ keys or mixer applet.
 Search uses a station list fetched directly from the
 [radio-browser.info](https://www.radio-browser.info) API - the same source the
 Cinnamon applet queries when you press "Update Radio Stationlist". The list is
-downloaded on first run (and whenever you press `u`), then cached so search
-works offline.
+downloaded on first run (and whenever you press `u`, or `Ctrl+U` while
+searching), then cached so search works offline. Mirror hosts are tried with
+exponential backoff if the first one is unavailable.
 
 The cache lives at `~/.config/radiocli/allStations.json` (following
 `$XDG_CONFIG_HOME`), next to `config.json`. Set `RADIOCLI_DB` to use a
 different path. If the list has never been downloaded and there is no network,
 the client still runs but search returns no results.
 
+## Architecture
+
+The code is organized as ports and adapters:
+
+- `internal/ports` — contracts used by the application core
+  (`StationStore`, `Catalog`, `Player`).
+- `internal/app` — application service/facade for playback, station management
+  and search; frontends call it instead of touching adapters directly.
+- `internal/config`, `internal/catalog`, `internal/player` — infrastructure
+  adapters for the filesystem, radio-browser.info and mpv.
+- `internal/tui` — Bubble Tea presentation layer; keeps only UI state
+  (selection, query, modal state, scroll offsets).
+- `internal/bootstrap` — composition root that wires everything together.
+
+Playback is event-driven: `player.MPV` publishes observed property changes on a
+channel, the TUI subscribes with a `tea.Cmd`, and the channel closing signals
+that mpv exited. The UI is an explicit state machine (`navigate`, `search`,
+`confirm delete`, `confirm quit`) with a per-state command keymap. Catalog
+refreshes use cache-aside with mirror failover, exponential backoff and jitter.
+
 ## Files
 
-| File | Purpose |
+| Path | Purpose |
 | --- | --- |
-| `main.go` | Entry point, startup and shutdown |
-| `model.go` | Bubble Tea model (UI, input handling, layout) |
-| `config.go` | Configuration load/save and station management |
-| `stations.go` | radio-browser.info station database (fetch, cache, search) |
-| `player.go` | mpv JSON IPC controller |
-| `control.go` | Remote-control subcommands (`pause` / `unpause`) |
+| `main.go` | Entry point and argument dispatch |
+| `internal/bootstrap` | Composition root (`Build`, `Close`) |
+| `internal/app` | Application service |
+| `internal/ports` | Interfaces between core and adapters |
+| `internal/station` | Station domain type |
+| `internal/tui` | Bubble Tea model, state machine, commands, layout |
+| `internal/config` | Configuration load/save and station management |
+| `internal/catalog` | radio-browser.info fetch, cache and search |
+| `internal/player` | mpv JSON IPC controller and event stream |
+| `internal/control` | Remote-control subcommands (`pause` / `unpause`) |
+| `internal/paths` | Config, cache and socket locations |
 | `Makefile` | Build and install targets |
 
-## Not implemented (relative to the applet)
-
-MPRIS integration / pausing other media players, YouTube downloads, icon/colour
-appearance settings and the graphical seek bar.

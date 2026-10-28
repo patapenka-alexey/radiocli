@@ -91,6 +91,7 @@ func (m *Model) keyMap() keyMap {
 func (m *Model) resolveCommand(token string) (command, bool) {
 	if m.state == stateSearch {
 		cmd, ok := searchKeyMap[token]
+
 		return cmd, ok
 	}
 
@@ -107,6 +108,7 @@ func lookupKey(bindings keyMap, token string) (command, bool) {
 
 	if utf8.RuneCountInString(token) == 1 {
 		cmd, ok := bindings[strings.ToLower(token)]
+
 		return cmd, ok
 	}
 
