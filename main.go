@@ -6,12 +6,8 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
-	"radiocli/internal/app"
-	"radiocli/internal/catalog"
-	"radiocli/internal/config"
+	"radiocli/internal/bootstrap"
 	"radiocli/internal/control"
-	"radiocli/internal/player"
-	"radiocli/internal/tui"
 )
 
 func main() {
@@ -25,21 +21,16 @@ func main() {
 		return
 	}
 
-	cfg := config.Load()
-	db := catalog.Load()
-
-	pl, err := player.New(cfg.MpvPath())
+	deps, err := bootstrap.Build()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "radiocli: %v\n", err)
 
 		os.Exit(1)
 	}
+	defer deps.Close()
 
-	svc := app.New(cfg, db, pl)
-	prog := tea.NewProgram(tui.NewModel(svc))
+	prog := tea.NewProgram(deps.Model)
 	if _, err := prog.Run(); err != nil {
 		fmt.Fprintf(os.Stderr, "radiocli: %v\n", err)
 	}
-
-	pl.Quit()
 }
