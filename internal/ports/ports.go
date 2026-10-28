@@ -32,6 +32,12 @@ type PlayerStatus struct {
 	Alive       bool
 }
 
+// Event is a player state change notification. A closed Events channel means
+// the player process has exited.
+type Event struct {
+	Property string
+}
+
 // Player is the playback control port.
 type Player interface {
 	Play(url string)
@@ -40,4 +46,5 @@ type Player interface {
 	Status() PlayerStatus
 	Alive() bool
 	Quit()
+	Events() <-chan Event
 }

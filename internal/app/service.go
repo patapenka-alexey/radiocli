@@ -107,3 +107,9 @@ func (s *Service) Alive() bool {
 func (s *Service) CurrentStation() string {
 	return s.currentStation
 }
+
+// Events returns player state-change notifications. The channel is closed when
+// the player exits.
+func (s *Service) Events() <-chan ports.Event {
+	return s.player.Events()
+}

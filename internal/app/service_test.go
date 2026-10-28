@@ -66,6 +66,7 @@ type fakePlayer struct {
 	toggles int
 	stops   int
 	status  ports.PlayerStatus
+	events  chan ports.Event
 }
 
 func (f *fakePlayer) Play(url string) { f.played = append(f.played, url) }
@@ -79,6 +80,8 @@ func (f *fakePlayer) Status() ports.PlayerStatus { return f.status }
 func (f *fakePlayer) Alive() bool { return f.alive }
 
 func (f *fakePlayer) Quit() {}
+
+func (f *fakePlayer) Events() <-chan ports.Event { return f.events }
 
 func TestPlaySetsCurrentStation(t *testing.T) {
 	pl := &fakePlayer{alive: true}
@@ -182,5 +185,15 @@ func TestSearchDelegatesToCatalog(t *testing.T) {
 	}
 	if catalog.limited != 10 {
 		t.Fatalf("limit = %d, want 10", catalog.limited)
+	}
+}
+
+func TestEventsDelegatesToPlayer(t *testing.T) {
+	events := make(chan ports.Event)
+	pl := &fakePlayer{events: events}
+	svc := New(&fakeStore{}, &fakeCatalog{}, pl)
+
+	if got := svc.Events(); got != events {
+		t.Fatal("Events() did not return the player event channel")
 	}
 }

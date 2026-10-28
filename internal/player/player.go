@@ -29,9 +29,12 @@ type MPV struct {
 	cmd      *exec.Cmd
 	conn     net.Conn
 	waitDone chan struct{}
+	events   chan ports.Event
 
 	sendMu    sync.Mutex
 	requestID int
+
+	eventsOnce sync.Once
 
 	mu          sync.Mutex
 	title       string
@@ -64,6 +67,7 @@ func New(mpvPath string) (*MPV, error) {
 		socketPath: paths.ControlSocketPath(),
 		idle:       true,
 		waitDone:   make(chan struct{}),
+		events:     make(chan ports.Event, 64),
 	}
 
 	if err := p.start(); err != nil {
@@ -71,6 +75,25 @@ func New(mpvPath string) (*MPV, error) {
 	}
 
 	return p, nil
+}
+
+// Events returns the channel of player state changes. The channel is closed
+// when the mpv process exits.
+func (p *MPV) Events() <-chan ports.Event {
+	return p.events
+}
+
+func (p *MPV) publish(property string) {
+	select {
+	case p.events <- ports.Event{Property: property}:
+	default:
+	}
+}
+
+func (p *MPV) closeEvents() {
+	p.eventsOnce.Do(func() {
+		close(p.events)
+	})
 }
 
 func (p *MPV) start() error {
@@ -166,6 +189,7 @@ func (p *MPV) readLoop() {
 	p.mu.Lock()
 	p.exited = true
 	p.mu.Unlock()
+	p.closeEvents()
 }
 
 func (p *MPV) handleLine(line []byte) {
@@ -180,6 +204,7 @@ func (p *MPV) handleLine(line []byte) {
 
 	name, _ := msg["name"].(string)
 	p.applyProperty(name, msg["data"])
+	p.publish(name)
 }
 
 func (p *MPV) applyProperty(name string, value any) {

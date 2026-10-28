@@ -10,6 +10,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"radiocli/internal/app"
+	"radiocli/internal/ports"
 	"radiocli/internal/station"
 )
 
@@ -22,10 +23,18 @@ const (
 	stateConfirmQuit
 )
 
-type tickMsg time.Time
-
 type stationsRefreshedMsg struct {
 	err error
+}
+
+type playerEventMsg struct {
+	event ports.Event
+}
+
+type playerExitedMsg struct{}
+
+type flashExpiredMsg struct {
+	id int
 }
 
 // Model is the Bubble Tea model for the radiocli TUI.
@@ -45,12 +54,14 @@ type Model struct {
 	searchIndex   int
 	searchOffset  int
 
-	message         string
-	messageUntil    time.Time
-	confirmName     string
-	quitResume      state
-	mpvExitNotified bool
-	refreshing      bool
+	message          string
+	messageUntil     time.Time
+	flashID          int
+	scheduledFlashID int
+	confirmName      string
+	quitResume       state
+	mpvExitNotified  bool
+	refreshing       bool
 }
 
 // NewModel creates the TUI model with the application service.
@@ -58,10 +69,15 @@ func NewModel(svc *app.Service) *Model {
 	return &Model{app: svc}
 }
 
-func tickCmd() tea.Cmd {
-	return tea.Tick(200*time.Millisecond, func(t time.Time) tea.Msg {
-		return tickMsg(t)
-	})
+func waitForPlayerEvent(events <-chan ports.Event) tea.Cmd {
+	return func() tea.Msg {
+		event, ok := <-events
+		if !ok {
+			return playerExitedMsg{}
+		}
+
+		return playerEventMsg{event: event}
+	}
 }
 
 func fetchStationsCmd(svc *app.Service) tea.Cmd {
@@ -81,10 +97,13 @@ func (m *Model) startRefresh() tea.Cmd {
 }
 
 func (m *Model) Init() tea.Cmd {
-	cmds := []tea.Cmd{tickCmd()}
+	cmds := []tea.Cmd{waitForPlayerEvent(m.app.Events())}
 
 	if !m.app.CatalogAvailable() {
 		cmds = append(cmds, m.startRefresh())
+	}
+	if timer := m.flashTimer(); timer != nil {
+		cmds = append(cmds, timer)
 	}
 
 	return tea.Batch(cmds...)
@@ -93,6 +112,10 @@ func (m *Model) Init() tea.Cmd {
 func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	cmd := m.update(msg)
 	m.ensureVisible()
+
+	if timer := m.flashTimer(); timer != nil {
+		cmd = tea.Batch(cmd, timer)
+	}
 
 	return m, cmd
 }
@@ -121,13 +144,24 @@ func (m *Model) update(msg tea.Msg) tea.Cmd {
 
 		return nil
 
-	case tickMsg:
-		if !m.app.Alive() && !m.mpvExitNotified {
+	case playerEventMsg:
+		return waitForPlayerEvent(m.app.Events())
+
+	case playerExitedMsg:
+		if !m.mpvExitNotified {
 			m.mpvExitNotified = true
 			m.flash("mpv exited unexpectedly", 10*time.Second)
 		}
 
-		return tickCmd()
+		return nil
+
+	case flashExpiredMsg:
+		if msg.id == m.flashID {
+			m.message = ""
+			m.messageUntil = time.Time{}
+		}
+
+		return nil
 	}
 
 	return nil
@@ -148,6 +182,25 @@ func (m *Model) View() tea.View {
 func (m *Model) flash(text string, d time.Duration) {
 	m.message = text
 	m.messageUntil = time.Now().Add(d)
+	m.flashID++
+}
+
+func (m *Model) flashTimer() tea.Cmd {
+	if m.flashID == m.scheduledFlashID {
+		return nil
+	}
+	m.scheduledFlashID = m.flashID
+
+	delay := time.Until(m.messageUntil)
+	if delay <= 0 {
+		return nil
+	}
+
+	id := m.flashID
+
+	return tea.Tick(delay, func(time.Time) tea.Msg {
+		return flashExpiredMsg{id: id}
+	})
 }
 
 func (m *Model) activeMessage() string {

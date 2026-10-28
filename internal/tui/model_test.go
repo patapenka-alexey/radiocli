@@ -56,6 +56,8 @@ func (fakePlayer) Alive() bool { return true }
 
 func (fakePlayer) Quit() {}
 
+func (fakePlayer) Events() <-chan ports.Event { return nil }
+
 func newTestModel(stations int) *Model {
 	return NewModel(app.New(&fakeStore{stations: make([]station.Station, stations)}, fakeCatalog{}, fakePlayer{}))
 }
