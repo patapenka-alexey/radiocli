@@ -87,14 +87,21 @@ func (m *model) Init() tea.Cmd {
 }
 
 func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	cmd := m.update(msg)
+	m.ensureVisible()
+
+	return m, cmd
+}
+
+func (m *model) update(msg tea.Msg) tea.Cmd {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
-		return m, nil
+		return nil
 
 	case tea.KeyPressMsg:
-		return m, m.handleKey(msg)
+		return m.handleKey(msg)
 
 	case stationsRefreshedMsg:
 		m.refreshing = false
@@ -108,7 +115,7 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 
-		return m, nil
+		return nil
 
 	case tickMsg:
 		if !m.pl.isAlive() && !m.mpvExitNotified {
@@ -116,10 +123,10 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.flash("mpv exited unexpectedly", 10*time.Second)
 		}
 
-		return m, tickCmd()
+		return tickCmd()
 	}
 
-	return m, nil
+	return nil
 }
 
 func (m *model) View() tea.View {
@@ -400,34 +407,84 @@ func padRight(s string, width int) string {
 	return s + strings.Repeat(" ", max(0, width-runeLen(s)))
 }
 
-func (m *model) render() (string, *tea.Cursor) {
+type layout struct {
+	width          int
+	height         int
+	leftWidth      int
+	footerRows     int
+	bodyRows       int
+	contentRows    int
+	stationVisible int
+	searchVisible  int
+	confirming     bool
+}
+
+func (m *model) layout() layout {
 	w, h := m.width, m.height
-	if w < 40 || h < 8 {
+	l := layout{width: w, height: h, leftWidth: max(30, w/2)}
+	l.confirming = m.pendingDelete != "" || m.pendingQuit
+	l.footerRows = 1
+	if l.confirming {
+		l.footerRows = 2
+	}
+
+	l.bodyRows = h - l.footerRows
+	if l.bodyRows < 1 {
+		l.bodyRows = 1
+	}
+
+	l.contentRows = l.bodyRows - 1
+	if l.contentRows < 1 {
+		l.contentRows = 1
+	}
+
+	l.stationVisible = max(0, l.contentRows-1)
+	l.searchVisible = max(0, l.contentRows-2)
+
+	return l
+}
+
+func (m *model) ensureVisible() {
+	if m.width < 40 || m.height < 8 {
+		return
+	}
+
+	l := m.layout()
+	m.stationOffset = clampOffset(m.stationIndex, m.stationOffset, l.stationVisible, len(m.cfg.Stations))
+	m.searchOffset = clampOffset(m.searchIndex, m.searchOffset, l.searchVisible, len(m.searchResults))
+}
+
+func clampOffset(index, offset, visible, total int) int {
+	if visible <= 0 {
+		return 0
+	}
+
+	if index < offset {
+		offset = index
+	} else if index >= offset+visible {
+		offset = index - visible + 1
+	}
+
+	offset = min(offset, max(0, total-visible))
+
+	return max(0, offset)
+}
+
+func (m *model) render() (string, *tea.Cursor) {
+	l := m.layout()
+	if l.width < 40 || l.height < 8 {
 		return "Terminal too small", nil
 	}
 
-	leftWidth := max(30, w/2)
-	confirming := m.pendingDelete != "" || m.pendingQuit
-	footerRows := 1
-	if confirming {
-		footerRows = 2
-	}
-	bodyTop := 0
-	bodyBottom := h - footerRows
-	bodyHeight := bodyBottom - bodyTop
-	if bodyHeight < 1 {
-		bodyHeight = 1
-	}
-
-	lines := make([]string, 0, h)
-	lines = append(lines, m.bodyLines(bodyHeight, leftWidth, w)...)
-	lines = append(lines, m.footerLines(w, footerRows)...)
+	lines := make([]string, 0, l.height)
+	lines = append(lines, m.bodyLines(l.bodyRows, l.leftWidth, l.width)...)
+	lines = append(lines, m.footerLines(l.width, l.footerRows)...)
 
 	var cursor *tea.Cursor
-	if m.mode == modeSearch && !confirming {
-		x := leftWidth + 3 + runeLen(searchPrompt(m.searchQuery))
-		y := bodyTop + 2
-		cursor = tea.NewCursor(min(x, w-1), y)
+	if m.mode == modeSearch && !l.confirming {
+		x := l.leftWidth + 3 + runeLen(searchPrompt(m.searchQuery))
+		y := 2
+		cursor = tea.NewCursor(min(x, l.width-1), y)
 	}
 
 	return strings.Join(lines, "\n"), cursor
@@ -493,16 +550,6 @@ func (m *model) stationListLines(rows, leftWidth int) []string {
 		visible = 0
 	}
 
-	if index < offset {
-		offset = index
-	} else if index >= offset+visible {
-		offset = index - visible + 1
-	}
-	if offset < 0 {
-		offset = 0
-	}
-	m.stationOffset = offset
-
 	left := make([]string, rows)
 	left[0] = style(ansiCyan, padRight(" Stations", leftWidth))
 
@@ -563,15 +610,6 @@ func (m *model) searchPanelLines(rows, width int) []string {
 	}
 
 	index, offset := m.searchIndex, m.searchOffset
-	if index < offset {
-		offset = index
-	} else if index >= offset+visible {
-		offset = index - visible + 1
-	}
-	if offset < 0 {
-		offset = 0
-	}
-	m.searchOffset = offset
 
 	for row := 0; row < visible && row < rows-start; row++ {
 		itemIdx := offset + row
