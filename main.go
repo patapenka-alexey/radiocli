@@ -5,11 +5,17 @@ import (
 	"os"
 
 	tea "charm.land/bubbletea/v2"
+
+	"radiocli/internal/catalog"
+	"radiocli/internal/config"
+	"radiocli/internal/control"
+	"radiocli/internal/player"
+	"radiocli/internal/tui"
 )
 
 func main() {
 	if args := os.Args[1:]; len(args) > 0 {
-		if err := runControl(args); err != nil {
+		if err := control.Run(args); err != nil {
 			fmt.Fprintf(os.Stderr, "radiocli: %v\n", err)
 
 			os.Exit(1)
@@ -18,20 +24,20 @@ func main() {
 		return
 	}
 
-	cfg := loadConfig()
-	db := loadStationDB()
+	cfg := config.Load()
+	db := catalog.Load()
 
-	pl, err := newPlayer(cfg.MpvPath)
+	pl, err := player.New(cfg.MpvPath)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "radiocli: %v\n", err)
 
 		os.Exit(1)
 	}
 
-	prog := tea.NewProgram(newModel(cfg, db, pl))
+	prog := tea.NewProgram(tui.NewModel(cfg, db, pl))
 	if _, err := prog.Run(); err != nil {
 		fmt.Fprintf(os.Stderr, "radiocli: %v\n", err)
 	}
 
-	pl.quit()
+	pl.Quit()
 }

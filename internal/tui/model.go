@@ -1,4 +1,4 @@
-package main
+package tui
 
 import (
 	"fmt"
@@ -8,6 +8,11 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
+
+	"radiocli/internal/catalog"
+	"radiocli/internal/config"
+	"radiocli/internal/player"
+	"radiocli/internal/station"
 )
 
 type mode int
@@ -23,10 +28,11 @@ type stationsRefreshedMsg struct {
 	err error
 }
 
-type model struct {
-	cfg *config
-	db  *stationDB
-	pl  *player
+// Model is the Bubble Tea model for the radiocli TUI.
+type Model struct {
+	cfg *config.Store
+	db  *catalog.Repository
+	pl  *player.MPV
 
 	width  int
 	height int
@@ -38,7 +44,7 @@ type model struct {
 	currentStation string
 
 	searchQuery   string
-	searchResults []Station
+	searchResults []station.Station
 	searchIndex   int
 	searchOffset  int
 
@@ -50,8 +56,9 @@ type model struct {
 	refreshing      bool
 }
 
-func newModel(cfg *config, db *stationDB, pl *player) *model {
-	return &model{cfg: cfg, db: db, pl: pl}
+// NewModel creates the TUI model with its dependencies.
+func NewModel(cfg *config.Store, db *catalog.Repository, pl *player.MPV) *Model {
+	return &Model{cfg: cfg, db: db, pl: pl}
 }
 
 func tickCmd() tea.Cmd {
@@ -60,13 +67,13 @@ func tickCmd() tea.Cmd {
 	})
 }
 
-func fetchStationsCmd(db *stationDB) tea.Cmd {
+func fetchStationsCmd(db *catalog.Repository) tea.Cmd {
 	return func() tea.Msg {
-		return stationsRefreshedMsg{err: db.refresh()}
+		return stationsRefreshedMsg{err: db.Refresh()}
 	}
 }
 
-func (m *model) startRefresh() tea.Cmd {
+func (m *Model) startRefresh() tea.Cmd {
 	if m.refreshing {
 		return nil
 	}
@@ -76,24 +83,24 @@ func (m *model) startRefresh() tea.Cmd {
 	return fetchStationsCmd(m.db)
 }
 
-func (m *model) Init() tea.Cmd {
+func (m *Model) Init() tea.Cmd {
 	cmds := []tea.Cmd{tickCmd()}
 
-	if !m.db.available() {
+	if !m.db.Available() {
 		cmds = append(cmds, m.startRefresh())
 	}
 
 	return tea.Batch(cmds...)
 }
 
-func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	cmd := m.update(msg)
 	m.ensureVisible()
 
 	return m, cmd
 }
 
-func (m *model) update(msg tea.Msg) tea.Cmd {
+func (m *Model) update(msg tea.Msg) tea.Cmd {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
@@ -109,7 +116,7 @@ func (m *model) update(msg tea.Msg) tea.Cmd {
 		if msg.err != nil {
 			m.flash("Station list update failed", 5*time.Second)
 		} else {
-			m.flash(fmt.Sprintf("Station list updated (%d stations)", m.db.count()), 3*time.Second)
+			m.flash(fmt.Sprintf("Station list updated (%d stations)", m.db.Count()), 3*time.Second)
 			if m.mode == modeSearch {
 				m.updateSearch()
 			}
@@ -118,7 +125,7 @@ func (m *model) update(msg tea.Msg) tea.Cmd {
 		return nil
 
 	case tickMsg:
-		if !m.pl.isAlive() && !m.mpvExitNotified {
+		if !m.pl.Alive() && !m.mpvExitNotified {
 			m.mpvExitNotified = true
 			m.flash("mpv exited unexpectedly", 10*time.Second)
 		}
@@ -129,7 +136,7 @@ func (m *model) update(msg tea.Msg) tea.Cmd {
 	return nil
 }
 
-func (m *model) View() tea.View {
+func (m *Model) View() tea.View {
 	content, cursor := m.render()
 
 	v := tea.NewView(content)
@@ -141,12 +148,12 @@ func (m *model) View() tea.View {
 
 // -- actions ----------------------------------------------------------------
 
-func (m *model) flash(text string, d time.Duration) {
+func (m *Model) flash(text string, d time.Duration) {
 	m.message = text
 	m.messageUntil = time.Now().Add(d)
 }
 
-func (m *model) activeMessage() string {
+func (m *Model) activeMessage() string {
 	if time.Now().Before(m.messageUntil) {
 		return m.message
 	}
@@ -154,18 +161,18 @@ func (m *model) activeMessage() string {
 	return ""
 }
 
-func (m *model) playStation(name, url string) {
-	if !m.pl.isAlive() {
+func (m *Model) playStation(name, url string) {
+	if !m.pl.Alive() {
 		m.flash("mpv is not running", 5*time.Second)
 
 		return
 	}
 
 	m.currentStation = name
-	m.pl.play(url)
+	m.pl.Play(url)
 }
 
-func (m *model) playSelectedStation() {
+func (m *Model) playSelectedStation() {
 	if len(m.cfg.Stations) == 0 {
 		return
 	}
@@ -174,7 +181,7 @@ func (m *model) playSelectedStation() {
 	m.playStation(s.Name, s.URL)
 }
 
-func (m *model) playSelectedSearch() {
+func (m *Model) playSelectedSearch() {
 	if len(m.searchResults) == 0 {
 		return
 	}
@@ -183,23 +190,23 @@ func (m *model) playSelectedSearch() {
 	m.playStation(s.Name, s.URL)
 }
 
-func (m *model) addSelectedSearch() {
+func (m *Model) addSelectedSearch() {
 	if len(m.searchResults) == 0 {
 		return
 	}
 
 	s := m.searchResults[m.searchIndex]
-	if err := m.cfg.addStation(s.Name, s.URL); err != nil {
+	if err := m.cfg.AddStation(s.Name, s.URL); err != nil {
 		m.flash(err.Error(), 5*time.Second)
 
 		return
 	}
 
-	_ = m.cfg.save()
+	_ = m.cfg.Save()
 	m.flash(fmt.Sprintf("Added '%s' to My Stations", s.Name), 3*time.Second)
 }
 
-func (m *model) deleteSelected() {
+func (m *Model) deleteSelected() {
 	if len(m.cfg.Stations) == 0 {
 		return
 	}
@@ -207,7 +214,7 @@ func (m *model) deleteSelected() {
 	m.pendingDelete = m.cfg.Stations[m.stationIndex].Name
 }
 
-func (m *model) confirmQuit(yes bool) tea.Cmd {
+func (m *Model) confirmQuit(yes bool) tea.Cmd {
 	m.pendingQuit = false
 	if yes {
 		return tea.Quit
@@ -216,15 +223,15 @@ func (m *model) confirmQuit(yes bool) tea.Cmd {
 	return nil
 }
 
-func (m *model) confirmDelete(yes bool) {
+func (m *Model) confirmDelete(yes bool) {
 	name := m.pendingDelete
 	m.pendingDelete = ""
 	if name == "" || !yes {
 		return
 	}
 
-	m.cfg.removeStation(name)
-	_ = m.cfg.save()
+	m.cfg.RemoveStation(name)
+	_ = m.cfg.Save()
 
 	if name == m.currentStation {
 		m.currentStation = ""
@@ -236,20 +243,20 @@ func (m *model) confirmDelete(yes bool) {
 	m.flash(fmt.Sprintf("Removed '%s'", name), 3*time.Second)
 }
 
-func (m *model) moveStation(delta int) {
+func (m *Model) moveStation(delta int) {
 	last := len(m.cfg.Stations) - 1
 	m.stationIndex = min(max(0, last), max(0, m.stationIndex+delta))
 }
 
-func (m *model) updateSearch() {
-	m.searchResults = m.db.search(m.searchQuery, 200)
+func (m *Model) updateSearch() {
+	m.searchResults = m.db.Search(m.searchQuery, 200)
 	m.searchIndex = 0
 	m.searchOffset = 0
 }
 
 // -- input ------------------------------------------------------------------
 
-func (m *model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
+func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 	key := msg.Key()
 
 	if key.Text == "" && key.Mod&(tea.ModCtrl|tea.ModAlt|tea.ModMeta|tea.ModSuper|tea.ModHyper) != 0 {
@@ -288,7 +295,7 @@ func (m *model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 	return m.handleNavKey(key)
 }
 
-func (m *model) handleSearchKey(key tea.Key) tea.Cmd {
+func (m *Model) handleSearchKey(key tea.Key) tea.Cmd {
 	switch key.Code {
 	case tea.KeyEscape:
 		m.mode = modeNavigate
@@ -324,7 +331,7 @@ func (m *model) handleSearchKey(key tea.Key) tea.Cmd {
 	return nil
 }
 
-func (m *model) handleNavKey(key tea.Key) tea.Cmd {
+func (m *Model) handleNavKey(key tea.Key) tea.Cmd {
 	switch key.Code {
 	case tea.KeyUp:
 		m.moveStation(-1)
@@ -333,10 +340,10 @@ func (m *model) handleNavKey(key tea.Key) tea.Cmd {
 	case tea.KeyEnter:
 		m.playSelectedStation()
 	case tea.KeySpace:
-		if m.pl.snapshot().Idle {
+		if m.pl.Snapshot().Idle {
 			m.playSelectedStation()
 		} else {
-			m.pl.togglePause()
+			m.pl.TogglePause()
 		}
 	}
 
@@ -353,7 +360,7 @@ func (m *model) handleNavKey(key tea.Key) tea.Cmd {
 	case "j":
 		m.moveStation(1)
 	case "s":
-		m.pl.stop()
+		m.pl.Stop()
 		m.currentStation = ""
 	case "/":
 		m.mode = modeSearch
@@ -419,7 +426,7 @@ type layout struct {
 	confirming     bool
 }
 
-func (m *model) layout() layout {
+func (m *Model) layout() layout {
 	w, h := m.width, m.height
 	l := layout{width: w, height: h, leftWidth: max(30, w/2)}
 	l.confirming = m.pendingDelete != "" || m.pendingQuit
@@ -444,7 +451,7 @@ func (m *model) layout() layout {
 	return l
 }
 
-func (m *model) ensureVisible() {
+func (m *Model) ensureVisible() {
 	if m.width < 40 || m.height < 8 {
 		return
 	}
@@ -470,7 +477,7 @@ func clampOffset(index, offset, visible, total int) int {
 	return max(0, offset)
 }
 
-func (m *model) render() (string, *tea.Cursor) {
+func (m *Model) render() (string, *tea.Cursor) {
 	l := m.layout()
 	if l.width < 40 || l.height < 8 {
 		return "Terminal too small", nil
@@ -490,7 +497,7 @@ func (m *model) render() (string, *tea.Cursor) {
 	return strings.Join(lines, "\n"), cursor
 }
 
-func (m *model) bodyLines(rows, leftWidth, width int) []string {
+func (m *Model) bodyLines(rows, leftWidth, width int) []string {
 	contentRows := rows - 1
 	if contentRows < 1 {
 		contentRows = 1
@@ -541,7 +548,7 @@ func separatorLine(leftWidth, width int) string {
 	return strings.Repeat("─", leftWidth) + "┼" + strings.Repeat("─", width-leftWidth-1)
 }
 
-func (m *model) stationListLines(rows, leftWidth int) []string {
+func (m *Model) stationListLines(rows, leftWidth int) []string {
 	items := m.cfg.Stations
 	index, offset := m.stationIndex, m.stationOffset
 
@@ -596,7 +603,7 @@ func searchPrompt(query string) string {
 	return " Search: " + query
 }
 
-func (m *model) searchPanelLines(rows, width int) []string {
+func (m *Model) searchPanelLines(rows, width int) []string {
 	items := m.searchResults
 
 	lines := make([]string, 0, rows)
@@ -636,8 +643,8 @@ func (m *model) searchPanelLines(rows, width int) []string {
 	return lines
 }
 
-func (m *model) nowPlayingLines() []string {
-	snap := m.pl.snapshot()
+func (m *Model) nowPlayingLines() []string {
+	snap := m.pl.Snapshot()
 	playing := !snap.Idle && snap.Alive
 
 	status := "Stopped"
@@ -650,9 +657,9 @@ func (m *model) nowPlayingLines() []string {
 		statusStyle = ansiCyan
 	}
 
-	station := m.currentStation
-	if station == "" {
-		station = "-"
+	stationName := m.currentStation
+	if stationName == "" {
+		stationName = "-"
 	}
 
 	title := snap.Title
@@ -663,7 +670,7 @@ func (m *model) nowPlayingLines() []string {
 	lines := []string{
 		style(ansiCyan, "Now Playing"),
 		"",
-		labelValue("Station", station, ""),
+		labelValue("Station", stationName, ""),
 		labelValue("Title", title, ""),
 		labelValue("Status", status, statusStyle),
 	}
@@ -706,7 +713,7 @@ func fmtTime(seconds float64) string {
 	return fmt.Sprintf("%02d:%02d", minutes, secs)
 }
 
-func (m *model) footerLines(width, count int) []string {
+func (m *Model) footerLines(width, count int) []string {
 	lines := make([]string, count)
 
 	if m.pendingQuit {

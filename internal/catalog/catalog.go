@@ -1,4 +1,6 @@
-package main
+// Package catalog fetches, caches and searches the radio-browser.info station
+// database.
+package catalog
 
 import (
 	"encoding/json"
@@ -10,15 +12,18 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"radiocli/internal/paths"
+	"radiocli/internal/station"
 )
 
-// stationDB is the searchable station database. It is fetched directly from
+// Repository is the searchable station database. It is fetched directly from
 // the radio-browser.info API - the same source the Cinnamon Radio++ applet
 // uses to build its allStations.json - and cached on disk so search still
 // works offline.
-type stationDB struct {
+type Repository struct {
 	mu      sync.RWMutex
-	entries []Station
+	entries []station.Station
 	err     string
 	path    string
 }
@@ -33,25 +38,10 @@ var radioBrowserURLs = []string{
 
 const userAgent = "radiocli/1.0"
 
-// stationDBCachePath returns where the downloaded list is cached, alongside
-// config.json in ~/.config/radiocli. RADIOCLI_DB overrides the location.
-func stationDBCachePath() string {
-	if override := os.Getenv("RADIOCLI_DB"); override != "" {
-		if abs, err := filepath.Abs(override); err == nil {
-			return abs
-		}
-		return override
-	}
-	if dir, err := os.UserConfigDir(); err == nil {
-		return filepath.Join(dir, "radiocli", "allStations.json")
-	}
-	return "allStations.json"
-}
-
-// loadStationDB loads the cached station list. It never performs a network
-// request; call refresh to download the current list.
-func loadStationDB() *stationDB {
-	db := &stationDB{path: stationDBCachePath()}
+// Load loads the cached station list. It never performs a network request;
+// call Refresh to download the current list.
+func Load() *Repository {
+	db := &Repository{path: paths.CatalogPath()}
 
 	data, err := os.ReadFile(db.path)
 	if err != nil {
@@ -68,14 +58,14 @@ func loadStationDB() *stationDB {
 		if len(item) < 2 {
 			continue
 		}
-		db.entries = append(db.entries, Station{Name: toStr(item[0]), URL: toStr(item[1])})
+		db.entries = append(db.entries, station.Station{Name: toStr(item[0]), URL: toStr(item[1])})
 	}
 	return db
 }
 
-// refresh downloads the full station list, applies the same filtering and
+// Refresh downloads the full station list, applies the same filtering and
 // deduplication the applet does, then writes it to the cache.
-func (db *stationDB) refresh() error {
+func (db *Repository) Refresh() error {
 	client := &http.Client{Timeout: 90 * time.Second}
 
 	var lastErr error
@@ -101,7 +91,7 @@ func (db *stationDB) refresh() error {
 	return lastErr
 }
 
-func fetchStations(client *http.Client, url string) ([]Station, error) {
+func fetchStations(client *http.Client, url string) ([]station.Station, error) {
 	req, err := http.NewRequest(http.MethodGet, url, nil)
 	if err != nil {
 		return nil, err
@@ -127,8 +117,8 @@ func fetchStations(client *http.Client, url string) ([]Station, error) {
 		return nil, err
 	}
 
-	seen := make(map[Station]bool, len(raw))
-	entries := make([]Station, 0, len(raw))
+	seen := make(map[station.Station]bool, len(raw))
+	entries := make([]station.Station, 0, len(raw))
 
 	for _, s := range raw {
 		name := strings.TrimSpace(s.Name)
@@ -137,12 +127,12 @@ func fetchStations(client *http.Client, url string) ([]Station, error) {
 			continue
 		}
 
-		station := Station{Name: name, URL: url}
-		if seen[station] {
+		entry := station.Station{Name: name, URL: url}
+		if seen[entry] {
 			continue
 		}
-		seen[station] = true
-		entries = append(entries, station)
+		seen[entry] = true
+		entries = append(entries, entry)
 	}
 
 	sort.Slice(entries, func(i, j int) bool { return entries[i].Name < entries[j].Name })
@@ -150,7 +140,7 @@ func fetchStations(client *http.Client, url string) ([]Station, error) {
 	return entries, nil
 }
 
-func (db *stationDB) save() error {
+func (db *Repository) save() error {
 	db.mu.RLock()
 	raw := make([][2]string, len(db.entries))
 
@@ -183,17 +173,17 @@ func toStr(v any) string {
 	return fmt.Sprint(v)
 }
 
-func (db *stationDB) count() int {
+func (db *Repository) Count() int {
 	db.mu.RLock()
 	defer db.mu.RUnlock()
 	return len(db.entries)
 }
 
-func (db *stationDB) available() bool {
-	return db.count() > 0
+func (db *Repository) Available() bool {
+	return db.Count() > 0
 }
 
-func (db *stationDB) search(query string, limit int) []Station {
+func (db *Repository) Search(query string, limit int) []station.Station {
 	query = strings.ToLower(strings.TrimSpace(query))
 	if query == "" {
 		return nil
@@ -202,7 +192,7 @@ func (db *stationDB) search(query string, limit int) []Station {
 	db.mu.RLock()
 	defer db.mu.RUnlock()
 
-	results := make([]Station, 0, limit)
+	results := make([]station.Station, 0, limit)
 	for _, entry := range db.entries {
 		if strings.Contains(strings.ToLower(entry.Name), query) {
 			results = append(results, entry)

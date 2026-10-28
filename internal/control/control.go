@@ -1,36 +1,32 @@
-package main
+// Package control implements the remote-control subcommands.
+package control
 
 import (
 	"bufio"
 	"encoding/json"
 	"fmt"
 	"net"
-	"os"
 	"time"
+
+	"radiocli/internal/paths"
 )
 
-// controlSocketPath is the mpv JSON IPC socket shared by the running instance
-// and the remote-control commands.
-func controlSocketPath() string {
-	return fmt.Sprintf("/tmp/radiocli-%d.sock", os.Getuid())
-}
-
-// runControl handles the remote-control subcommands. It talks to the mpv
-// instance started by the running TUI, so the TUI reflects the change via its
-// property observers. Success is silent.
-func runControl(args []string) error {
+// Run handles the remote-control subcommands. It talks to the mpv instance
+// started by the running TUI, so the TUI reflects the change via its property
+// observers. Success is silent.
+func Run(args []string) error {
 	switch args[0] {
 	case "pause":
-		return sendControlCommand([]any{"set_property", "pause", true})
+		return sendCommand([]any{"set_property", "pause", true})
 	case "unpause":
-		return sendControlCommand([]any{"set_property", "pause", false})
+		return sendCommand([]any{"set_property", "pause", false})
 	default:
 		return fmt.Errorf("unknown command %q (available: pause, unpause)", args[0])
 	}
 }
 
-func sendControlCommand(command []any) error {
-	conn, err := net.DialTimeout("unix", controlSocketPath(), 2*time.Second)
+func sendCommand(command []any) error {
+	conn, err := net.DialTimeout("unix", paths.ControlSocketPath(), 2*time.Second)
 	if err != nil {
 		return fmt.Errorf("radiocli is not running")
 	}

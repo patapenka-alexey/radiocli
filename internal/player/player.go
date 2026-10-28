@@ -1,4 +1,5 @@
-package main
+// Package player drives a long-lived mpv process over its JSON IPC socket.
+package player
 
 import (
 	"bufio"
@@ -11,12 +12,14 @@ import (
 	"sync"
 	"syscall"
 	"time"
+
+	"radiocli/internal/paths"
 )
 
-// player drives a long-lived `mpv` process over its JSON IPC socket. mpv is
+// MPV drives a long-lived `mpv` process over its JSON IPC socket. mpv is
 // started once with --idle=yes and all playback is controlled through the IPC
 // protocol; no mpv-mpris plugin or DBus is required.
-type player struct {
+type MPV struct {
 	mpvPath    string
 	socketPath string
 
@@ -38,7 +41,8 @@ type player struct {
 	exited      bool
 }
 
-type playerSnapshot struct {
+// Snapshot is a point-in-time view of the player state.
+type Snapshot struct {
 	Title       string
 	Paused      bool
 	Idle        bool
@@ -62,10 +66,11 @@ var observedProperties = []observedProperty{
 	{5, "idle-active"},
 }
 
-func newPlayer(mpvPath string) (*player, error) {
-	p := &player{
+// New starts an mpv process and connects to its IPC socket.
+func New(mpvPath string) (*MPV, error) {
+	p := &MPV{
 		mpvPath:    mpvPath,
-		socketPath: controlSocketPath(),
+		socketPath: paths.ControlSocketPath(),
 		idle:       true,
 		waitDone:   make(chan struct{}),
 	}
@@ -77,7 +82,7 @@ func newPlayer(mpvPath string) (*player, error) {
 	return p, nil
 }
 
-func (p *player) start() error {
+func (p *MPV) start() error {
 	p.removeStaleSocket()
 
 	args := []string{
@@ -122,13 +127,13 @@ func (p *player) start() error {
 	return nil
 }
 
-func (p *player) removeStaleSocket() {
+func (p *MPV) removeStaleSocket() {
 	if _, err := os.Stat(p.socketPath); err == nil {
 		_ = os.Remove(p.socketPath)
 	}
 }
 
-func (p *player) connectWithRetry() (net.Conn, error) {
+func (p *MPV) connectWithRetry() (net.Conn, error) {
 	deadline := time.Now().Add(5 * time.Second)
 	var lastErr error
 
@@ -155,7 +160,7 @@ func (p *player) connectWithRetry() (net.Conn, error) {
 	return nil, fmt.Errorf("could not connect to mpv IPC socket: %w", lastErr)
 }
 
-func (p *player) readLoop() {
+func (p *MPV) readLoop() {
 	reader := bufio.NewReader(p.conn)
 	for {
 		line, err := reader.ReadBytes('\n')
@@ -172,7 +177,7 @@ func (p *player) readLoop() {
 	p.mu.Unlock()
 }
 
-func (p *player) handleLine(line []byte) {
+func (p *MPV) handleLine(line []byte) {
 	var msg map[string]any
 	if err := json.Unmarshal(line, &msg); err != nil {
 		return
@@ -186,7 +191,7 @@ func (p *player) handleLine(line []byte) {
 	p.applyProperty(name, msg["data"])
 }
 
-func (p *player) applyProperty(name string, value any) {
+func (p *MPV) applyProperty(name string, value any) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
@@ -237,7 +242,7 @@ func toFloat(v any) (float64, bool) {
 	}
 }
 
-func (p *player) send(command []any) {
+func (p *MPV) send(command []any) {
 	if p.conn == nil {
 		return
 	}
@@ -255,7 +260,8 @@ func (p *player) send(command []any) {
 	_, _ = p.conn.Write(data)
 }
 
-func (p *player) play(url string) {
+// Play loads the given stream URL into mpv.
+func (p *MPV) Play(url string) {
 	p.send([]any{"loadfile", url, "replace"})
 
 	p.mu.Lock()
@@ -264,18 +270,21 @@ func (p *player) play(url string) {
 	p.mu.Unlock()
 }
 
-func (p *player) togglePause() {
+// TogglePause cycles the paused state.
+func (p *MPV) TogglePause() {
 	p.send([]any{"cycle", "pause"})
 }
 
-func (p *player) stop() {
+// Stop stops playback.
+func (p *MPV) Stop() {
 	p.send([]any{"stop"})
 }
 
-func (p *player) snapshot() playerSnapshot {
+// Snapshot returns a consistent copy of the observed player state.
+func (p *MPV) Snapshot() Snapshot {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	return playerSnapshot{
+	return Snapshot{
 		Title:       p.title,
 		Paused:      p.paused,
 		Idle:        p.idle,
@@ -287,13 +296,15 @@ func (p *player) snapshot() playerSnapshot {
 	}
 }
 
-func (p *player) isAlive() bool {
+// Alive reports whether the mpv process is still running.
+func (p *MPV) Alive() bool {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	return !p.exited && p.cmd != nil
 }
 
-func (p *player) quit() {
+// Quit asks mpv to exit and waits for the process to finish.
+func (p *MPV) Quit() {
 	if p.conn != nil {
 		p.send([]any{"quit"})
 		_ = p.conn.Close()

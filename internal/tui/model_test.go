@@ -1,6 +1,11 @@
-package main
+package tui
 
-import "testing"
+import (
+	"testing"
+
+	"radiocli/internal/config"
+	"radiocli/internal/station"
+)
 
 func TestClampOffset(t *testing.T) {
 	tests := []struct {
@@ -33,8 +38,8 @@ func TestClampOffset(t *testing.T) {
 }
 
 func TestEnsureVisibleKeepsOffsetsInRange(t *testing.T) {
-	m := &model{
-		cfg:          &config{Stations: make([]Station, 20)},
+	m := &Model{
+		cfg:          &config.Store{Stations: make([]station.Station, 20)},
 		width:        80,
 		height:       20,
 		stationIndex: 19,
@@ -51,8 +56,8 @@ func TestEnsureVisibleKeepsOffsetsInRange(t *testing.T) {
 }
 
 func TestEnsureVisibleIsNoopOnSmallTerminal(t *testing.T) {
-	m := &model{
-		cfg:           &config{Stations: make([]Station, 20)},
+	m := &Model{
+		cfg:           &config.Store{Stations: make([]station.Station, 20)},
 		width:         10,
 		height:        5,
 		stationIndex:  19,
