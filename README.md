@@ -50,10 +50,11 @@ run `make` first. Install path can be changed with
 | `Space` | Play/pause |
 | `s` | Stop playback |
 | `/` | Search the station database |
-| `a` | (in search) Add the highlighted result to My Stations |
+| `Ctrl+A` | (in search) Add the highlighted result to My Stations |
 | `Enter` | (in search) Play the highlighted result |
 | `Esc` | (in search) Cancel search |
 | `u` | Update the station database from radio-browser.info |
+| `Ctrl+U` | (in search) Update the station database |
 | `d` | Delete the selected station (asks for confirmation) |
 | `Ctrl+Z` | Suspend (playback keeps running) |
 | `q` / `Ctrl+C` | Quit (asks for confirmation) |

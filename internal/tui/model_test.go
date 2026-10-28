@@ -14,7 +14,11 @@ type fakeStore struct {
 
 func (f *fakeStore) Stations() []station.Station { return f.stations }
 
-func (f *fakeStore) AddStation(string, string) error { return nil }
+func (f *fakeStore) AddStation(name, url string) error {
+	f.stations = append(f.stations, station.Station{Name: name, URL: url})
+
+	return nil
+}
 
 func (f *fakeStore) RemoveStation(name string) {
 	filtered := f.stations[:0]

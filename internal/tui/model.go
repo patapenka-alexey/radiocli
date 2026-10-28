@@ -258,127 +258,22 @@ func (m *Model) updateSearch() {
 // -- input ------------------------------------------------------------------
 
 func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
-	key := msg.Key()
+	token := msg.String()
 
-	if key.Text == "" && key.Mod&(tea.ModCtrl|tea.ModAlt|tea.ModMeta|tea.ModSuper|tea.ModHyper) != 0 {
-		switch msg.String() {
-		case "ctrl+c":
-			m.requestQuit()
-		case "ctrl+z":
-			return tea.Suspend
-		}
-		return nil
+	if cmd, ok := globalKeyMap[token]; ok {
+		return m.execute(cmd)
+	}
+	if cmd, ok := m.resolveCommand(token); ok {
+		return m.execute(cmd)
 	}
 
-	switch m.state {
-	case stateConfirmQuit:
-		return m.handleConfirmQuitKey(key)
-	case stateConfirmDelete:
-		return m.handleConfirmDeleteKey(key)
-	case stateSearch:
-		return m.handleSearchKey(key)
-	default:
-		return m.handleNavKey(key)
-	}
-}
-
-func (m *Model) handleConfirmQuitKey(key tea.Key) tea.Cmd {
-	switch key.Code {
-	case 'y', 'Y':
-		return tea.Quit
-	case 'n', 'N', tea.KeyEscape:
-		m.cancelQuit()
-	}
-
-	return nil
-}
-
-func (m *Model) handleConfirmDeleteKey(key tea.Key) tea.Cmd {
-	switch key.Code {
-	case 'y', 'Y':
-		m.confirmDelete()
-	case 'n', 'N', tea.KeyEscape:
-		m.cancelDelete()
-	}
-
-	return nil
-}
-
-func (m *Model) handleSearchKey(key tea.Key) tea.Cmd {
-	switch key.Code {
-	case tea.KeyEscape:
-		m.state = stateNavigate
-		return nil
-	case tea.KeyEnter:
-		m.playSelectedSearch()
-		m.state = stateNavigate
-		return nil
-	case tea.KeyUp:
-		m.searchIndex = max(0, m.searchIndex-1)
-		return nil
-	case tea.KeyDown:
-		m.searchIndex = min(max(0, len(m.searchResults)-1), m.searchIndex+1)
-		return nil
-	case tea.KeyBackspace:
-		if m.searchQuery != "" {
-			r := []rune(m.searchQuery)
-			m.searchQuery = string(r[:len(r)-1])
+	if m.state == stateSearch {
+		if text := msg.Key().Text; text != "" && isPrintable(text) {
+			m.searchQuery += text
 			m.updateSearch()
 		}
-		return nil
 	}
 
-	text := key.Text
-	if text == "a" {
-		m.addSelectedSearch()
-		return nil
-	}
-	if text != "" && isPrintable(text) {
-		m.searchQuery += text
-		m.updateSearch()
-	}
-	return nil
-}
-
-func (m *Model) handleNavKey(key tea.Key) tea.Cmd {
-	switch key.Code {
-	case tea.KeyUp:
-		m.moveStation(-1)
-	case tea.KeyDown:
-		m.moveStation(1)
-	case tea.KeyEnter:
-		m.playSelectedStation()
-	case tea.KeySpace:
-		if m.app.Status().Idle {
-			m.playSelectedStation()
-		} else {
-			m.app.TogglePause()
-		}
-	}
-
-	text := key.Text
-	if text == "" {
-		text = string(key.Code)
-	}
-
-	switch strings.ToLower(text) {
-	case "q":
-		m.requestQuit()
-	case "k":
-		m.moveStation(-1)
-	case "j":
-		m.moveStation(1)
-	case "s":
-		m.app.Stop()
-	case "/":
-		m.state = stateSearch
-		m.searchQuery = ""
-		m.updateSearch()
-	case "u":
-		return m.startRefresh()
-	case "d":
-		m.requestDelete()
-	}
 	return nil
 }
 
@@ -735,8 +630,8 @@ func (m *Model) footerLines(width, count int) []string {
 	case stateSearch:
 		hints := hotkeyHints([][2]string{
 			{"Enter", "play"},
-			{"a", "add"},
-			{"u", "update"},
+			{"Ctrl+A", "add"},
+			{"Ctrl+U", "update"},
 			{"Esc", "cancel"},
 		})
 		lines[0] = truncate(hints, width)
