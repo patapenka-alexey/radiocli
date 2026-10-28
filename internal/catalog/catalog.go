@@ -4,7 +4,9 @@ package catalog
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
+	"math/rand/v2"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -20,6 +22,84 @@ import (
 
 var _ ports.Catalog = (*Repository)(nil)
 
+// ErrFetch is returned when every mirror failed.
+var ErrFetch = errors.New("fetch station database")
+
+// ErrCache is returned when the fetched database could not be written to disk.
+var ErrCache = errors.New("cache station database")
+
+// HTTPDoer is the subset of *http.Client used by the catalog.
+type HTTPDoer interface {
+	Do(*http.Request) (*http.Response, error)
+}
+
+// RetryPolicy controls mirror failover. Attempts is the number of full passes
+// over the mirror list.
+type RetryPolicy struct {
+	Attempts  int
+	BaseDelay time.Duration
+	MaxDelay  time.Duration
+}
+
+// Options configures a Repository.
+type Options struct {
+	Path      string
+	Mirrors   []string
+	Client    HTTPDoer
+	Retry     RetryPolicy
+	UserAgent string
+}
+
+// StatusError is returned for non-2xx responses.
+type StatusError struct {
+	Status string
+}
+
+func (e *StatusError) Error() string {
+	return "unexpected status " + e.Status
+}
+
+// DecodeError is returned when the station list cannot be decoded.
+type DecodeError struct {
+	Err error
+}
+
+func (e *DecodeError) Error() string {
+	return "decode station database: " + e.Err.Error()
+}
+
+func (e *DecodeError) Unwrap() error {
+	return e.Err
+}
+
+// FetchError ties a network or protocol error to the mirror that produced it.
+type FetchError struct {
+	URL string
+	Err error
+}
+
+func (e *FetchError) Error() string {
+	return fmt.Sprintf("fetch %s: %v", e.URL, e.Err)
+}
+
+func (e *FetchError) Unwrap() error {
+	return e.Err
+}
+
+var defaultMirrors = []string{
+	"https://de1.api.radio-browser.info/json/stations?limit=100000&hidebroken=true",
+	"https://de2.api.radio-browser.info/json/stations?limit=100000&hidebroken=true",
+	"https://all.api.radio-browser.info/json/stations?limit=100000&hidebroken=true",
+}
+
+var defaultRetryPolicy = RetryPolicy{
+	Attempts:  2,
+	BaseDelay: 250 * time.Millisecond,
+	MaxDelay:  2 * time.Second,
+}
+
+const defaultUserAgent = "radiocli/1.0"
+
 // Repository is the searchable station database. It is fetched directly from
 // the radio-browser.info API - the same source the Cinnamon Radio++ applet
 // uses to build its allStations.json - and cached on disk so search still
@@ -29,32 +109,68 @@ type Repository struct {
 	entries []station.Station
 	err     string
 	path    string
+
+	mirrors   []string
+	client    HTTPDoer
+	retry     RetryPolicy
+	userAgent string
+	sleep     func(time.Duration)
 }
 
-// radioBrowserURLs mirror the endpoint the applet queries. Extra hosts are
-// tried in order if the first one is unavailable.
-var radioBrowserURLs = []string{
-	"https://de1.api.radio-browser.info/json/stations?limit=100000&hidebroken=true",
-	"https://de2.api.radio-browser.info/json/stations?limit=100000&hidebroken=true",
-	"https://all.api.radio-browser.info/json/stations?limit=100000&hidebroken=true",
-}
+// New builds a repository with the given options. Zero values fall back to the
+// production defaults.
+func New(opts Options) *Repository {
+	if opts.Path == "" {
+		opts.Path = paths.CatalogPath()
+	}
+	if len(opts.Mirrors) == 0 {
+		opts.Mirrors = defaultMirrors
+	}
+	if opts.Client == nil {
+		opts.Client = &http.Client{Timeout: 90 * time.Second}
+	}
+	if opts.UserAgent == "" {
+		opts.UserAgent = defaultUserAgent
+	}
+	if opts.Retry.Attempts <= 0 {
+		opts.Retry.Attempts = defaultRetryPolicy.Attempts
+	}
+	if opts.Retry.BaseDelay < 0 {
+		opts.Retry.BaseDelay = 0
+	}
+	if opts.Retry.MaxDelay <= 0 {
+		opts.Retry.MaxDelay = defaultRetryPolicy.MaxDelay
+	}
 
-const userAgent = "radiocli/1.0"
+	return &Repository{
+		path:      opts.Path,
+		mirrors:   opts.Mirrors,
+		client:    opts.Client,
+		retry:     opts.Retry,
+		userAgent: opts.UserAgent,
+		sleep:     time.Sleep,
+	}
+}
 
 // Load loads the cached station list. It never performs a network request;
 // call Refresh to download the current list.
 func Load() *Repository {
-	db := &Repository{path: paths.CatalogPath()}
+	db := New(Options{})
+	db.loadCache()
 
+	return db
+}
+
+func (db *Repository) loadCache() {
 	data, err := os.ReadFile(db.path)
 	if err != nil {
-		return db
+		return
 	}
 
 	var raw [][]any
 	if err := json.Unmarshal(data, &raw); err != nil {
 		db.err = fmt.Sprintf("Failed to load cached station database: %v", err)
-		return db
+		return
 	}
 
 	for _, item := range raw {
@@ -63,53 +179,95 @@ func Load() *Repository {
 		}
 		db.entries = append(db.entries, station.Station{Name: toStr(item[0]), URL: toStr(item[1])})
 	}
-	return db
 }
 
 // Refresh downloads the full station list, applies the same filtering and
 // deduplication the applet does, then writes it to the cache.
 func (db *Repository) Refresh() error {
-	client := &http.Client{Timeout: 90 * time.Second}
-
 	var lastErr error
-	for _, url := range radioBrowserURLs {
-		entries, err := fetchStations(client, url)
-		if err != nil {
-			lastErr = err
-			continue
+	attempts := 0
+
+	for round := 0; round < db.retry.Attempts; round++ {
+		for _, url := range db.mirrors {
+			if attempts > 0 {
+				db.sleep(db.backoff(attempts))
+			}
+			attempts++
+
+			entries, err := db.fetch(url)
+			if err != nil {
+				lastErr = err
+				continue
+			}
+
+			db.mu.Lock()
+			db.entries = entries
+			db.err = ""
+			db.mu.Unlock()
+
+			if err := db.save(); err != nil {
+				return fmt.Errorf("%w: %w", ErrCache, err)
+			}
+
+			return nil
 		}
-
-		db.mu.Lock()
-		db.entries = entries
-		db.err = ""
-		db.mu.Unlock()
-
-		return db.save()
 	}
 
+	if lastErr == nil {
+		lastErr = errors.New("no mirrors configured")
+	}
+
+	err := fmt.Errorf("%w: %w", ErrFetch, lastErr)
+
 	db.mu.Lock()
-	db.err = fmt.Sprintf("Failed to fetch station database: %v", lastErr)
+	db.err = err.Error()
 	db.mu.Unlock()
 
-	return lastErr
+	return err
 }
 
-func fetchStations(client *http.Client, url string) ([]station.Station, error) {
+func (db *Repository) backoff(attempt int) time.Duration {
+	delay := db.retry.BaseDelay
+	for i := 1; i < attempt && delay < db.retry.MaxDelay; i++ {
+		delay *= 2
+	}
+	if delay > db.retry.MaxDelay {
+		delay = db.retry.MaxDelay
+	}
+	if delay <= 0 {
+		return 0
+	}
+
+	half := delay / 2
+
+	return half + time.Duration(rand.Int64N(int64(half)+1))
+}
+
+func (db *Repository) fetch(url string) ([]station.Station, error) {
+	entries, err := db.doFetch(url)
+	if err != nil {
+		return nil, &FetchError{URL: url, Err: err}
+	}
+
+	return entries, nil
+}
+
+func (db *Repository) doFetch(url string) ([]station.Station, error) {
 	req, err := http.NewRequest(http.MethodGet, url, nil)
 	if err != nil {
 		return nil, err
 	}
 
-	req.Header.Set("User-Agent", userAgent)
+	req.Header.Set("User-Agent", db.userAgent)
 
-	resp, err := client.Do(req)
+	resp, err := db.client.Do(req)
 	if err != nil {
 		return nil, err
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, fmt.Errorf("unexpected status %s", resp.Status)
+		return nil, &StatusError{Status: resp.Status}
 	}
 
 	var raw []struct {
@@ -117,7 +275,7 @@ func fetchStations(client *http.Client, url string) ([]station.Station, error) {
 		URL  string `json:"url"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&raw); err != nil {
-		return nil, err
+		return nil, &DecodeError{Err: err}
 	}
 
 	seen := make(map[station.Station]bool, len(raw))
@@ -176,16 +334,19 @@ func toStr(v any) string {
 	return fmt.Sprint(v)
 }
 
+// Count returns the number of cached stations.
 func (db *Repository) Count() int {
 	db.mu.RLock()
 	defer db.mu.RUnlock()
 	return len(db.entries)
 }
 
+// Available reports whether any stations are cached.
 func (db *Repository) Available() bool {
 	return db.Count() > 0
 }
 
+// Search returns stations whose name contains the query, up to limit.
 func (db *Repository) Search(query string, limit int) []station.Station {
 	query = strings.ToLower(strings.TrimSpace(query))
 	if query == "" {
