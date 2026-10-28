@@ -10,8 +10,11 @@ import (
 	"strings"
 
 	"radiocli/internal/paths"
+	"radiocli/internal/ports"
 	"radiocli/internal/station"
 )
+
+var _ ports.StationStore = (*Store)(nil)
 
 func defaultStations() []station.Station {
 	return []station.Station{
@@ -35,8 +38,8 @@ func defaultStations() []station.Station {
 
 // Store mirrors the JSON file stored at ~/.config/radiocli/config.json.
 type Store struct {
-	Stations []station.Station `json:"stations"`
-	MpvPath  string            `json:"mpv_path"`
+	stations []station.Station
+	mpvPath  string
 
 	path string
 }
@@ -45,7 +48,7 @@ type Store struct {
 // defaults when the file is missing or empty.
 func Load() *Store {
 	path := paths.ConfigPath()
-	cfg := &Store{MpvPath: "mpv", path: path}
+	cfg := &Store{mpvPath: "mpv", path: path}
 
 	if data, err := os.ReadFile(path); err == nil {
 		var raw struct {
@@ -54,18 +57,28 @@ func Load() *Store {
 		}
 
 		if json.Unmarshal(data, &raw) == nil {
-			cfg.Stations = raw.Stations
+			cfg.stations = raw.Stations
 			if raw.MpvPath != nil && *raw.MpvPath != "" {
-				cfg.MpvPath = *raw.MpvPath
+				cfg.mpvPath = *raw.MpvPath
 			}
 		}
 	}
 
-	if len(cfg.Stations) == 0 {
-		cfg.Stations = defaultStations()
+	if len(cfg.stations) == 0 {
+		cfg.stations = defaultStations()
 	}
 
 	return cfg
+}
+
+// Stations returns a copy of the configured station list.
+func (c *Store) Stations() []station.Station {
+	return append([]station.Station(nil), c.stations...)
+}
+
+// MpvPath returns the configured mpv executable.
+func (c *Store) MpvPath() string {
+	return c.mpvPath
 }
 
 // AddStation appends a station, enforcing the same uniqueness rules as the
@@ -77,7 +90,7 @@ func (c *Store) AddStation(name, url string) error {
 		return errors.New("Station must have a name and a url")
 	}
 
-	for _, s := range c.Stations {
+	for _, s := range c.stations {
 		if s.URL == url {
 			return fmt.Errorf("Another station (%s) already uses this url", s.Name)
 		}
@@ -86,22 +99,22 @@ func (c *Store) AddStation(name, url string) error {
 		}
 	}
 
-	c.Stations = append(c.Stations, station.Station{Name: name, URL: url})
+	c.stations = append(c.stations, station.Station{Name: name, URL: url})
 
 	return nil
 }
 
 // RemoveStation removes every station with the given name.
 func (c *Store) RemoveStation(name string) {
-	filtered := c.Stations[:0]
+	filtered := c.stations[:0]
 
-	for _, s := range c.Stations {
+	for _, s := range c.stations {
 		if s.Name != name {
 			filtered = append(filtered, s)
 		}
 	}
 
-	c.Stations = filtered
+	c.stations = filtered
 }
 
 // Save writes the configuration atomically to disk.
@@ -123,7 +136,12 @@ func (c *Store) Save() error {
 	enc.SetEscapeHTML(false)
 	enc.SetIndent("", "  ")
 
-	if err := enc.Encode(c); err != nil {
+	file := struct {
+		Stations []station.Station `json:"stations"`
+		MpvPath  string            `json:"mpv_path"`
+	}{Stations: c.stations, MpvPath: c.mpvPath}
+
+	if err := enc.Encode(file); err != nil {
 		f.Close()
 		return err
 	}

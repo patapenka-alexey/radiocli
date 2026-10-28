@@ -9,9 +9,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
 
-	"radiocli/internal/catalog"
-	"radiocli/internal/config"
-	"radiocli/internal/player"
+	"radiocli/internal/ports"
 	"radiocli/internal/station"
 )
 
@@ -30,9 +28,9 @@ type stationsRefreshedMsg struct {
 
 // Model is the Bubble Tea model for the radiocli TUI.
 type Model struct {
-	cfg *config.Store
-	db  *catalog.Repository
-	pl  *player.MPV
+	cfg ports.StationStore
+	db  ports.Catalog
+	pl  ports.Player
 
 	width  int
 	height int
@@ -57,7 +55,7 @@ type Model struct {
 }
 
 // NewModel creates the TUI model with its dependencies.
-func NewModel(cfg *config.Store, db *catalog.Repository, pl *player.MPV) *Model {
+func NewModel(cfg ports.StationStore, db ports.Catalog, pl ports.Player) *Model {
 	return &Model{cfg: cfg, db: db, pl: pl}
 }
 
@@ -67,7 +65,7 @@ func tickCmd() tea.Cmd {
 	})
 }
 
-func fetchStationsCmd(db *catalog.Repository) tea.Cmd {
+func fetchStationsCmd(db ports.Catalog) tea.Cmd {
 	return func() tea.Msg {
 		return stationsRefreshedMsg{err: db.Refresh()}
 	}
@@ -173,11 +171,11 @@ func (m *Model) playStation(name, url string) {
 }
 
 func (m *Model) playSelectedStation() {
-	if len(m.cfg.Stations) == 0 {
+	if len(m.cfg.Stations()) == 0 {
 		return
 	}
 
-	s := m.cfg.Stations[m.stationIndex]
+	s := m.cfg.Stations()[m.stationIndex]
 	m.playStation(s.Name, s.URL)
 }
 
@@ -207,11 +205,11 @@ func (m *Model) addSelectedSearch() {
 }
 
 func (m *Model) deleteSelected() {
-	if len(m.cfg.Stations) == 0 {
+	if len(m.cfg.Stations()) == 0 {
 		return
 	}
 
-	m.pendingDelete = m.cfg.Stations[m.stationIndex].Name
+	m.pendingDelete = m.cfg.Stations()[m.stationIndex].Name
 }
 
 func (m *Model) confirmQuit(yes bool) tea.Cmd {
@@ -236,15 +234,15 @@ func (m *Model) confirmDelete(yes bool) {
 	if name == m.currentStation {
 		m.currentStation = ""
 	}
-	if m.stationIndex > len(m.cfg.Stations)-1 {
-		m.stationIndex = max(0, len(m.cfg.Stations)-1)
+	if m.stationIndex > len(m.cfg.Stations())-1 {
+		m.stationIndex = max(0, len(m.cfg.Stations())-1)
 	}
 
 	m.flash(fmt.Sprintf("Removed '%s'", name), 3*time.Second)
 }
 
 func (m *Model) moveStation(delta int) {
-	last := len(m.cfg.Stations) - 1
+	last := len(m.cfg.Stations()) - 1
 	m.stationIndex = min(max(0, last), max(0, m.stationIndex+delta))
 }
 
@@ -340,7 +338,7 @@ func (m *Model) handleNavKey(key tea.Key) tea.Cmd {
 	case tea.KeyEnter:
 		m.playSelectedStation()
 	case tea.KeySpace:
-		if m.pl.Snapshot().Idle {
+		if m.pl.Status().Idle {
 			m.playSelectedStation()
 		} else {
 			m.pl.TogglePause()
@@ -457,7 +455,7 @@ func (m *Model) ensureVisible() {
 	}
 
 	l := m.layout()
-	m.stationOffset = clampOffset(m.stationIndex, m.stationOffset, l.stationVisible, len(m.cfg.Stations))
+	m.stationOffset = clampOffset(m.stationIndex, m.stationOffset, l.stationVisible, len(m.cfg.Stations()))
 	m.searchOffset = clampOffset(m.searchIndex, m.searchOffset, l.searchVisible, len(m.searchResults))
 }
 
@@ -549,7 +547,7 @@ func separatorLine(leftWidth, width int) string {
 }
 
 func (m *Model) stationListLines(rows, leftWidth int) []string {
-	items := m.cfg.Stations
+	items := m.cfg.Stations()
 	index, offset := m.stationIndex, m.stationOffset
 
 	visible := rows - 1
@@ -644,7 +642,7 @@ func (m *Model) searchPanelLines(rows, width int) []string {
 }
 
 func (m *Model) nowPlayingLines() []string {
-	snap := m.pl.Snapshot()
+	snap := m.pl.Status()
 	playing := !snap.Idle && snap.Alive
 
 	status := "Stopped"

@@ -27,7 +27,7 @@ func main() {
 	cfg := config.Load()
 	db := catalog.Load()
 
-	pl, err := player.New(cfg.MpvPath)
+	pl, err := player.New(cfg.MpvPath())
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "radiocli: %v\n", err)
 

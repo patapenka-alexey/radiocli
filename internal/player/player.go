@@ -14,7 +14,10 @@ import (
 	"time"
 
 	"radiocli/internal/paths"
+	"radiocli/internal/ports"
 )
+
+var _ ports.Player = (*MPV)(nil)
 
 // MPV drives a long-lived `mpv` process over its JSON IPC socket. mpv is
 // started once with --idle=yes and all playback is controlled through the IPC
@@ -39,18 +42,6 @@ type MPV struct {
 	duration    float64
 	hasDuration bool
 	exited      bool
-}
-
-// Snapshot is a point-in-time view of the player state.
-type Snapshot struct {
-	Title       string
-	Paused      bool
-	Idle        bool
-	TimePos     float64
-	HasTimePos  bool
-	Duration    float64
-	HasDuration bool
-	Alive       bool
 }
 
 type observedProperty struct {
@@ -280,11 +271,11 @@ func (p *MPV) Stop() {
 	p.send([]any{"stop"})
 }
 
-// Snapshot returns a consistent copy of the observed player state.
-func (p *MPV) Snapshot() Snapshot {
+// Status returns a consistent copy of the observed player state.
+func (p *MPV) Status() ports.PlayerStatus {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	return Snapshot{
+	return ports.PlayerStatus{
 		Title:       p.title,
 		Paused:      p.paused,
 		Idle:        p.idle,

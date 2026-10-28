@@ -14,8 +14,11 @@ import (
 	"time"
 
 	"radiocli/internal/paths"
+	"radiocli/internal/ports"
 	"radiocli/internal/station"
 )
+
+var _ ports.Catalog = (*Repository)(nil)
 
 // Repository is the searchable station database. It is fetched directly from
 // the radio-browser.info API - the same source the Cinnamon Radio++ applet
