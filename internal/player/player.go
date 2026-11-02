@@ -308,14 +308,10 @@ func (p *MPV) Status() ports.PlayerStatus {
 	defer p.mu.Unlock()
 
 	return ports.PlayerStatus{
-		Title:       p.title,
-		Paused:      p.paused,
-		Idle:        p.idle,
-		TimePos:     p.timePos,
-		HasTimePos:  p.hasTimePos,
-		Duration:    p.duration,
-		HasDuration: p.hasDuration,
-		Alive:       !p.exited && p.cmd != nil,
+		Title:  p.title,
+		Paused: p.paused,
+		Idle:   p.idle,
+		Alive:  !p.exited && p.cmd != nil,
 	}
 }
 

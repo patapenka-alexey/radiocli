@@ -643,21 +643,6 @@ func (m *Model) nowPlayingLines() []string {
 		labelValue("Status", status, statusStyle),
 	}
 
-	pos := "--:--"
-	if snap.HasTimePos {
-		pos = fmtTime(snap.TimePos)
-	}
-
-	timeText := "--:--"
-	switch {
-	case snap.HasDuration:
-		timeText = fmt.Sprintf("%s / %s", pos, fmtTime(snap.Duration))
-	case playing:
-		timeText = pos + " (live)"
-	}
-
-	lines = append(lines, labelValue("Time", timeText, ""))
-
 	if !snap.Alive {
 		lines = append(lines, "")
 		lines = append(lines, style(ansiCyan, "mpv is not running"))

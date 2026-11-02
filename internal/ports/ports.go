@@ -22,14 +22,10 @@ type Catalog interface {
 
 // PlayerStatus is a point-in-time view of the playback state.
 type PlayerStatus struct {
-	Title       string
-	Paused      bool
-	Idle        bool
-	TimePos     float64
-	HasTimePos  bool
-	Duration    float64
-	HasDuration bool
-	Alive       bool
+	Title  string
+	Paused bool
+	Idle   bool
+	Alive  bool
 }
 
 // Event is a player state change notification. A closed Events channel means
