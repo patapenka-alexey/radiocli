@@ -53,7 +53,6 @@ run `make` first. Install path can be changed with
 | `Ctrl+A` | (in search) Add the highlighted result to My Stations |
 | `Enter` | (in search) Play the highlighted result |
 | `Esc` | (in search) Cancel search |
-| `u` | Update the station database from radio-browser.info |
 | `Ctrl+U` | (in search) Update the station database |
 | `d` | Delete the selected station (asks for confirmation) |
 | `Ctrl+Z` | Suspend (playback keeps running) |
@@ -101,8 +100,8 @@ keys or mixer applet.
 Search uses a station list fetched directly from the
 [radio-browser.info](https://www.radio-browser.info) API - the same source the
 Cinnamon applet queries when you press "Update Radio Stationlist". The list is
-downloaded on first run (and whenever you press `u`, or `Ctrl+U` while
-searching), then cached so search works offline. Mirror hosts are tried with
+downloaded on first run (and whenever you press `Ctrl+U` while searching),
+then cached so search works offline. Mirror hosts are tried with
 exponential backoff if the first one is unavailable.
 
 The cache lives at `~/.config/radiocli/allStations.json` (following

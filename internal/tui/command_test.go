@@ -16,7 +16,6 @@ func TestKeyMapsPerState(t *testing.T) {
 	}{
 		{stateNavigate, "q", cmdRequestQuit},
 		{stateNavigate, "/", cmdOpenSearch},
-		{stateNavigate, "u", cmdRefresh},
 		{stateNavigate, "enter", cmdPlayStation},
 		{stateSearch, "ctrl+a", cmdAddSearch},
 		{stateSearch, "ctrl+u", cmdRefresh},
@@ -98,16 +97,16 @@ func TestSearchAddCommand(t *testing.T) {
 	}
 }
 
-func TestRefreshCommand(t *testing.T) {
+func TestRefreshNotBoundInNavigate(t *testing.T) {
 	m := newTestModel(1)
 
 	cmd := m.handleKey(press("u"))
 
-	if cmd == nil {
-		t.Fatal("refresh command returned nil tea.Cmd")
+	if cmd != nil {
+		t.Fatal("u should not trigger refresh in navigate mode")
 	}
-	if !m.refreshing {
-		t.Fatal("refreshing = false, want true")
+	if m.refreshing {
+		t.Fatal("refreshing = true, want false")
 	}
 }
 

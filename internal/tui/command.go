@@ -48,7 +48,6 @@ var navigateKeyMap = keyMap{
 	"space": cmdTogglePause,
 	"s":     cmdStop,
 	"/":     cmdOpenSearch,
-	"u":     cmdRefresh,
 	"d":     cmdRequestDelete,
 	"q":     cmdRequestQuit,
 }

@@ -721,7 +721,6 @@ func (m *Model) footerLines(width, leftWidth, count int) []string {
 		{"Space", "pause"},
 		{"s", "stop"},
 		{"/", "search"},
-		{"u", "update"},
 		{"d", "delete"},
 		{"E", "eq"},
 		{"q", "quit"},
