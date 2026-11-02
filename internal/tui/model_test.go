@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"strings"
 	"testing"
 
 	"radiocli/internal/app"
@@ -123,5 +124,18 @@ func TestEnsureVisibleIsNoopOnSmallTerminal(t *testing.T) {
 
 	if m.stationOffset != 7 {
 		t.Fatalf("station offset = %d, want 7", m.stationOffset)
+	}
+}
+
+func TestFooterSeparatorAboveHints(t *testing.T) {
+	m := newTestModel(1)
+
+	lines := m.footerLines(80, 40, 2)
+
+	if lines[0] != footerSeparatorLine(40, 80) {
+		t.Fatalf("separator = %q, want %q", lines[0], footerSeparatorLine(40, 80))
+	}
+	if !strings.Contains(lines[1], "move") {
+		t.Fatalf("hint line = %q", lines[1])
 	}
 }

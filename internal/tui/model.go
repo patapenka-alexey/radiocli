@@ -394,10 +394,7 @@ func (m *Model) layout() layout {
 	w, h := m.width, m.height
 	l := layout{width: w, height: h, leftWidth: max(30, w/2)}
 	l.confirming = m.state == stateConfirmDelete || m.state == stateConfirmQuit
-	l.footerRows = 1
-	if l.confirming {
-		l.footerRows = 2
-	}
+	l.footerRows = 2
 
 	l.bodyRows = h - l.footerRows
 	if l.bodyRows < 1 {
@@ -449,7 +446,7 @@ func (m *Model) render() (string, *tea.Cursor) {
 
 	lines := make([]string, 0, l.height)
 	lines = append(lines, m.bodyLines(l.bodyRows, l.leftWidth, l.width)...)
-	lines = append(lines, m.footerLines(l.width, l.footerRows)...)
+	lines = append(lines, m.footerLines(l.width, l.leftWidth, l.footerRows)...)
 
 	var cursor *tea.Cursor
 	if m.state == stateSearch && !l.confirming {
@@ -504,6 +501,14 @@ func composeRow(left, right []string, i, width int) string {
 }
 
 func separatorLine(leftWidth, width int) string {
+	return junctionLine(leftWidth, width, "┼")
+}
+
+func footerSeparatorLine(leftWidth, width int) string {
+	return junctionLine(leftWidth, width, "┴")
+}
+
+func junctionLine(leftWidth, width int, junction string) string {
 	if width <= 0 {
 		return ""
 	}
@@ -511,7 +516,7 @@ func separatorLine(leftWidth, width int) string {
 		return strings.Repeat("─", width)
 	}
 
-	return strings.Repeat("─", leftWidth) + "┼" + strings.Repeat("─", width-leftWidth-1)
+	return strings.Repeat("─", leftWidth) + junction + strings.Repeat("─", width-leftWidth-1)
 }
 
 func (m *Model) stationListLines(rows, leftWidth int) []string {
@@ -671,17 +676,25 @@ func fmtTime(seconds float64) string {
 	return fmt.Sprintf("%02d:%02d", minutes, secs)
 }
 
-func (m *Model) footerLines(width, count int) []string {
+func (m *Model) footerLines(width, leftWidth, count int) []string {
 	lines := make([]string, count)
+	if count == 0 {
+		return lines
+	}
+
+	lines[0] = footerSeparatorLine(leftWidth, width)
+	if count < 2 {
+		return lines
+	}
 
 	switch m.state {
 	case stateConfirmQuit:
-		lines[0] = style(ansiCyan, padRight("Quit radiocli? (y/N)", width))
+		lines[1] = style(ansiCyan, padRight("Quit radiocli? (y/N)", width))
 
 		return lines
 	case stateConfirmDelete:
 		prompt := fmt.Sprintf("Delete '%s'? (y/N)", m.confirmName)
-		lines[0] = style(ansiCyan, padRight(prompt, width))
+		lines[1] = style(ansiCyan, padRight(prompt, width))
 
 		return lines
 	case stateSearch:
@@ -691,13 +704,13 @@ func (m *Model) footerLines(width, count int) []string {
 			{"Ctrl+U", "update"},
 			{"Esc", "cancel"},
 		})
-		lines[0] = truncate(hints, width)
+		lines[1] = truncate(hints, width)
 
 		return lines
 	}
 
 	if msg := m.activeMessage(); msg != "" {
-		lines[0] = style(ansiCyan, padRight(msg, width))
+		lines[1] = style(ansiCyan, padRight(msg, width))
 
 		return lines
 	}
@@ -710,9 +723,10 @@ func (m *Model) footerLines(width, count int) []string {
 		{"/", "search"},
 		{"u", "update"},
 		{"d", "delete"},
+		{"E", "eq"},
 		{"q", "quit"},
 	})
-	lines[0] = truncate(hints, width)
+	lines[1] = truncate(hints, width)
 
 	return lines
 }
