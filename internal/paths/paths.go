@@ -20,6 +20,18 @@ func CatalogPath() string {
 	return overridePath("RADIOCLI_DB", "allStations.json")
 }
 
+// EqsetsPath returns radiocli's own equalizer preset directory, alongside
+// config.json in ~/.config/radiocli. RADIOCLI_EQSETS overrides the location.
+func EqsetsPath() string {
+	return overridePath("RADIOCLI_EQSETS", "eqsets")
+}
+
+// EqsetsPaths returns the equalizer preset directories to search, highest
+// priority first.
+func EqsetsPaths() []string {
+	return []string{EqsetsPath()}
+}
+
 // ControlSocketPath is the mpv JSON IPC socket shared by the running instance
 // and the remote-control commands.
 func ControlSocketPath() string {

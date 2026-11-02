@@ -6,6 +6,8 @@ import (
 	"radiocli/internal/app"
 	"radiocli/internal/catalog"
 	"radiocli/internal/config"
+	"radiocli/internal/equalizer"
+	"radiocli/internal/paths"
 	"radiocli/internal/player"
 	"radiocli/internal/tui"
 )
@@ -29,7 +31,8 @@ func Build() (*Deps, error) {
 		return nil, err
 	}
 
-	svc := app.New(cfg, db, pl)
+	presets := equalizer.NewLibrary(equalizer.Load(paths.EqsetsPaths()...))
+	svc := app.New(cfg, db, pl, cfg, presets)
 
 	return &Deps{
 		Config:  cfg,

@@ -61,5 +61,8 @@
       "url": "https://stream.rusradio.by:8443/live128"
     }
   ],
-  "mpv_path": "mpv"
+  "mpv_path": "mpv",
+  "equalizer_enabled": true,
+  "equalizer_preset": "wa_Party",
+  "equalizer_mixin": 0.25
 }

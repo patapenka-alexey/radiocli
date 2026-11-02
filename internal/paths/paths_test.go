@@ -38,3 +38,29 @@ func TestDefaultPathsFollowConfigDir(t *testing.T) {
 		t.Fatalf("CatalogPath() = %q, want %q", got, want)
 	}
 }
+
+func TestEqsetsPathOverride(t *testing.T) {
+	dir := t.TempDir()
+	want := filepath.Join(dir, "eqsets")
+	t.Setenv("RADIOCLI_EQSETS", want)
+
+	if got := EqsetsPath(); got != want {
+		t.Fatalf("EqsetsPath() = %q, want %q", got, want)
+	}
+	if got := EqsetsPaths(); len(got) != 1 || got[0] != want {
+		t.Fatalf("EqsetsPaths() = %q, want [%q]", got, want)
+	}
+}
+
+func TestEqsetsPathsDefault(t *testing.T) {
+	configDir := t.TempDir()
+	t.Setenv("RADIOCLI_EQSETS", "")
+	t.Setenv("XDG_CONFIG_HOME", configDir)
+
+	want := []string{filepath.Join(configDir, "radiocli", "eqsets")}
+	got := EqsetsPaths()
+
+	if len(got) != 1 || got[0] != want[0] {
+		t.Fatalf("EqsetsPaths() = %q, want %q", got, want)
+	}
+}

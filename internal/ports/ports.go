@@ -39,8 +39,17 @@ type Player interface {
 	Play(url string)
 	TogglePause()
 	Stop()
+	SetAudioFilter(filter string)
 	Status() PlayerStatus
 	Alive() bool
 	Quit()
 	Events() <-chan Event
+}
+
+// EqualizerSettings is the persistence port for the equalizer state.
+type EqualizerSettings interface {
+	EqualizerEnabled() bool
+	EqualizerPreset() string
+	EqualizerMixin() float64
+	SaveEqualizer(enabled bool, preset string) error
 }

@@ -55,6 +55,9 @@ run `make` first. Install path can be changed with
 | `Esc` | (in search) Cancel search |
 | `Ctrl+U` | (in search) Update the station database |
 | `d` | Delete the selected station (asks for confirmation) |
+| `E` | Toggle the equalizer on/off |
+| `e` | Reload equalizer presets |
+| `Ctrl+E` | Select the next equalizer preset |
 | `Ctrl+Z` | Suspend (playback keeps running) |
 | `q` / `Ctrl+C` | Quit (asks for confirmation) |
 
@@ -74,26 +77,51 @@ mpv's `pause` property.
 
 ## Configuration
 
-The station list and mpv path are stored in `config.json`, at
+The station list, mpv path and equalizer state are stored in `config.json`, at
 `~/.config/radiocli/config.json` (following `$XDG_CONFIG_HOME`). Set
 `RADIOCLI_CONFIG` to use a different path.
 
-The file is only written when you add (`Ctrl+A` while searching) or delete
-(`d`) a station; until then the in-memory defaults below are used. Example:
+The file is written when you add (`Ctrl+A` while searching) or delete (`d`) a
+station, or when the equalizer is toggled, reloaded or changed; until then the
+in-memory defaults below are used. Example:
 
 ```json
 {
   "stations": [
     { "name": "Smooth Chill", "url": "https://media-ssl.musicradio.com/ChillMP3" }
   ],
-  "mpv_path": "mpv"
+  "mpv_path": "mpv",
+  "equalizer_enabled": false,
+  "equalizer_preset": "wa_Rock",
+  "equalizer_mixin": 0.25
 }
 ```
 
-To point the client at a different mpv binary, change `mpv_path`.
+To point the client at a different mpv binary, change `mpv_path`. The
+equalizer state is saved automatically whenever it is toggled, reloaded or
+changed. `equalizer_mixin` controls how much original signal is mixed back in
+after equalizing (0.0 applies only the equalized signal, 1.0 disables
+equalization); the default is `0.25`.
 
 Playback volume is controlled by the system mixer; use your desktop's volume
 keys or mixer applet.
+
+## Equalizer
+
+The equalizer uses MOC's preset format. On startup radiocli reads presets from
+`~/.config/radiocli/eqsets`; if that directory is missing or empty, it falls
+back to the presets bundled into the binary. Set `RADIOCLI_EQSETS` to use
+another directory.
+
+`E` toggles the filter, `Ctrl+E` cycles presets and `e` re-reads the preset
+directory (useful after editing a preset). Presets are applied through mpv's
+`af` property using FFmpeg's octave-width peaking equalizer, with MOC's
+preamp line mapped to a `volume` filter. MOC's Mixin setting is supported via
+the visible `equalizer_mixin` config option: the signal is split, equalized on
+one branch, and mixed back with the original using that ratio.
+
+The bundled presets originate from the MOC eqsets collection described in
+`internal/equalizer/eqsets/README.md`.
 
 ## Station search
 
@@ -119,6 +147,8 @@ The code is organized as ports and adapters:
   and search; frontends call it instead of touching adapters directly.
 - `internal/config`, `internal/catalog`, `internal/player` — infrastructure
   adapters for the filesystem, radio-browser.info and mpv.
+- `internal/equalizer` — MOC preset parser, preset library and mpv filter
+  builder.
 - `internal/tui` — Bubble Tea presentation layer; keeps only UI state
   (selection, query, modal state, scroll offsets).
 - `internal/bootstrap` — composition root that wires everything together.
@@ -142,6 +172,7 @@ refreshes use cache-aside with mirror failover, exponential backoff and jitter.
 | `internal/config` | Configuration load/save and station management |
 | `internal/catalog` | radio-browser.info fetch, cache and search |
 | `internal/player` | mpv JSON IPC controller and event stream |
+| `internal/equalizer` | MOC preset parsing and mpv equalizer filters |
 | `internal/control` | Remote-control subcommands (`pause` / `unpause`) |
 | `internal/paths` | Config, cache and socket locations |
 | `Makefile` | Build and install targets |

@@ -302,6 +302,12 @@ func (p *MPV) Stop() {
 	p.send([]any{"stop"})
 }
 
+// SetAudioFilter replaces mpv's audio filter chain. An empty filter disables
+// filtering.
+func (p *MPV) SetAudioFilter(filter string) {
+	p.send([]any{"set_property", "af", filter})
+}
+
 // Status returns a consistent copy of the observed player state.
 func (p *MPV) Status() ports.PlayerStatus {
 	p.mu.Lock()

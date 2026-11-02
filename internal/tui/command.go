@@ -30,6 +30,9 @@ const (
 	cmdConfirmQuit
 	cmdCancelQuit
 	cmdSuspend
+	cmdToggleEqualizer
+	cmdRefreshEqualizer
+	cmdNextEqualizer
 )
 
 type keyMap map[string]command
@@ -37,6 +40,7 @@ type keyMap map[string]command
 var globalKeyMap = keyMap{
 	"ctrl+c": cmdRequestQuit,
 	"ctrl+z": cmdSuspend,
+	"ctrl+e": cmdNextEqualizer,
 }
 
 var navigateKeyMap = keyMap{
@@ -50,6 +54,8 @@ var navigateKeyMap = keyMap{
 	"/":     cmdOpenSearch,
 	"d":     cmdRequestDelete,
 	"q":     cmdRequestQuit,
+	"E":     cmdToggleEqualizer,
+	"e":     cmdRefreshEqualizer,
 }
 
 var searchKeyMap = keyMap{
@@ -159,6 +165,12 @@ func (m *Model) execute(cmd command) tea.Cmd {
 		m.cancelQuit()
 	case cmdSuspend:
 		return tea.Suspend
+	case cmdToggleEqualizer:
+		m.toggleEqualizer()
+	case cmdRefreshEqualizer:
+		m.refreshEqualizer()
+	case cmdNextEqualizer:
+		m.nextEqualizer()
 	}
 
 	return nil

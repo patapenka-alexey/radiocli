@@ -9,12 +9,16 @@ import (
 	"path/filepath"
 	"strings"
 
+	"radiocli/internal/equalizer"
 	"radiocli/internal/paths"
 	"radiocli/internal/ports"
 	"radiocli/internal/station"
 )
 
-var _ ports.StationStore = (*Store)(nil)
+var (
+	_ ports.StationStore      = (*Store)(nil)
+	_ ports.EqualizerSettings = (*Store)(nil)
+)
 
 func defaultStations() []station.Station {
 	return []station.Station{
@@ -41,6 +45,10 @@ type Store struct {
 	stations []station.Station
 	mpvPath  string
 
+	equalizerEnabled bool
+	equalizerPreset  string
+	equalizerMixin   float64
+
 	path string
 }
 
@@ -48,18 +56,30 @@ type Store struct {
 // defaults when the file is missing or empty.
 func Load() *Store {
 	path := paths.ConfigPath()
-	cfg := &Store{mpvPath: "mpv", path: path}
+	cfg := &Store{mpvPath: "mpv", equalizerMixin: equalizer.DefaultMixin, path: path}
 
 	if data, err := os.ReadFile(path); err == nil {
 		var raw struct {
-			Stations []station.Station `json:"stations"`
-			MpvPath  *string           `json:"mpv_path"`
+			Stations         []station.Station `json:"stations"`
+			MpvPath          *string           `json:"mpv_path"`
+			EqualizerEnabled *bool             `json:"equalizer_enabled"`
+			EqualizerPreset  *string           `json:"equalizer_preset"`
+			EqualizerMixin   *float64          `json:"equalizer_mixin"`
 		}
 
 		if json.Unmarshal(data, &raw) == nil {
 			cfg.stations = raw.Stations
 			if raw.MpvPath != nil && *raw.MpvPath != "" {
 				cfg.mpvPath = *raw.MpvPath
+			}
+			if raw.EqualizerEnabled != nil {
+				cfg.equalizerEnabled = *raw.EqualizerEnabled
+			}
+			if raw.EqualizerPreset != nil {
+				cfg.equalizerPreset = *raw.EqualizerPreset
+			}
+			if raw.EqualizerMixin != nil {
+				cfg.equalizerMixin = *raw.EqualizerMixin
 			}
 		}
 	}
@@ -118,6 +138,30 @@ func (c *Store) RemoveStation(name string) {
 	c.stations = filtered
 }
 
+// EqualizerEnabled reports whether the equalizer was enabled at last save.
+func (c *Store) EqualizerEnabled() bool {
+	return c.equalizerEnabled
+}
+
+// EqualizerPreset returns the preset selected at last save.
+func (c *Store) EqualizerPreset() string {
+	return c.equalizerPreset
+}
+
+// EqualizerMixin returns how much of the original signal is mixed back in
+// after equalizing.
+func (c *Store) EqualizerMixin() float64 {
+	return c.equalizerMixin
+}
+
+// SaveEqualizer updates the equalizer state and persists the configuration.
+func (c *Store) SaveEqualizer(enabled bool, preset string) error {
+	c.equalizerEnabled = enabled
+	c.equalizerPreset = preset
+
+	return c.Save()
+}
+
 // Save writes the configuration atomically to disk.
 func (c *Store) Save() error {
 	dir := filepath.Dir(c.path)
@@ -138,9 +182,18 @@ func (c *Store) Save() error {
 	enc.SetIndent("", "  ")
 
 	file := struct {
-		Stations []station.Station `json:"stations"`
-		MpvPath  string            `json:"mpv_path"`
-	}{Stations: c.stations, MpvPath: c.mpvPath}
+		Stations         []station.Station `json:"stations"`
+		MpvPath          string            `json:"mpv_path"`
+		EqualizerEnabled bool              `json:"equalizer_enabled"`
+		EqualizerPreset  string            `json:"equalizer_preset"`
+		EqualizerMixin   float64           `json:"equalizer_mixin"`
+	}{
+		Stations:         c.stations,
+		MpvPath:          c.mpvPath,
+		EqualizerEnabled: c.equalizerEnabled,
+		EqualizerPreset:  c.equalizerPreset,
+		EqualizerMixin:   c.equalizerMixin,
+	}
 
 	if err := enc.Encode(file); err != nil {
 		f.Close()

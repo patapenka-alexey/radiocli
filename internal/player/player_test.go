@@ -1,6 +1,7 @@
 package player
 
 import (
+	"encoding/json"
 	"net"
 	"testing"
 	"time"
@@ -75,5 +76,36 @@ func TestReadLoopClosesEventsOnExit(t *testing.T) {
 
 	if _, ok := <-p.Events(); ok {
 		t.Fatal("events channel is still open")
+	}
+}
+
+func TestSetAudioFilterSendsProperty(t *testing.T) {
+	client, server := net.Pipe()
+	defer server.Close()
+
+	p := newTestPlayer()
+	p.conn = client
+
+	done := make(chan map[string]any, 1)
+	go func() {
+		var msg map[string]any
+		if json.NewDecoder(server).Decode(&msg) == nil {
+			done <- msg
+		}
+	}()
+
+	p.SetAudioFilter("lavfi=[equalizer=f=100:width_type=o:width=1.5:g=-4]")
+
+	select {
+	case msg := <-done:
+		command, ok := msg["command"].([]any)
+		if !ok || len(command) != 3 {
+			t.Fatalf("command = %#v", msg["command"])
+		}
+		if command[0] != "set_property" || command[1] != "af" {
+			t.Fatalf("command = %#v", command)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("no command sent")
 	}
 }

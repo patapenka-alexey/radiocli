@@ -214,6 +214,47 @@ func (m *Model) activeMessage() string {
 	return ""
 }
 
+func (m *Model) toggleEqualizer() {
+	if err := m.app.ToggleEqualizer(); err != nil {
+		m.flash(err.Error(), 5*time.Second)
+
+		return
+	}
+
+	status := m.app.EqualizerStatus()
+	if status.Enabled {
+		m.flash(fmt.Sprintf("Equalizer on: %s", status.Preset), 3*time.Second)
+	} else {
+		m.flash("Equalizer off", 3*time.Second)
+	}
+}
+
+func (m *Model) refreshEqualizer() {
+	if err := m.app.RefreshEqualizer(); err != nil {
+		m.flash(err.Error(), 5*time.Second)
+
+		return
+	}
+
+	status := m.app.EqualizerStatus()
+	m.flash(fmt.Sprintf("Equalizer presets updated (%d)", status.Count), 3*time.Second)
+}
+
+func (m *Model) nextEqualizer() {
+	if err := m.app.NextEqualizer(); err != nil {
+		m.flash(err.Error(), 5*time.Second)
+
+		return
+	}
+
+	status := m.app.EqualizerStatus()
+	if status.Enabled {
+		m.flash(fmt.Sprintf("Equalizer preset: %s", status.Preset), 3*time.Second)
+	} else {
+		m.flash(fmt.Sprintf("Equalizer preset: %s (off)", status.Preset), 3*time.Second)
+	}
+}
+
 func (m *Model) playStation(s station.Station) {
 	if err := m.app.Play(s); err != nil {
 		m.flash(err.Error(), 5*time.Second)
@@ -640,12 +681,15 @@ func (m *Model) nowPlayingLines() []string {
 		title = "-"
 	}
 
+	eq, eqStyle := m.equalizerLabel()
+
 	lines := []string{
 		style(ansiCyan, "Now Playing"),
 		"",
 		labelValue("Station", stationName, ""),
 		labelValue("Title", title, ""),
 		labelValue("Status", status, statusStyle),
+		labelValue("EQ", eq, eqStyle),
 	}
 
 	if !snap.Alive {
@@ -654,6 +698,20 @@ func (m *Model) nowPlayingLines() []string {
 	}
 
 	return lines
+}
+
+func (m *Model) equalizerLabel() (string, string) {
+	status := m.app.EqualizerStatus()
+	if status.Preset == "" {
+		return "Off", ansiDim
+	}
+
+	label := fmt.Sprintf("%s (%d/%d)", status.Preset, status.Index+1, status.Count)
+	if status.Enabled {
+		return label, ansiCyan
+	}
+
+	return "Off · " + label, ansiDim
 }
 
 func labelValue(label, value, valueStyle string) string {
