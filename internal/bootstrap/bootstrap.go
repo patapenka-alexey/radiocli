@@ -21,22 +21,22 @@ type Deps struct {
 
 // Build constructs the application dependencies.
 func Build() (*Deps, error) {
-	cfg := config.Load()
-	db := catalog.Load()
+	config := config.Load()
+	catalog := catalog.Load()
 
-	pl, err := player.New(cfg.MpvPath())
+	player, err := player.New(config.MpvPath())
 	if err != nil {
 		return nil, err
 	}
 
-	svc := app.New(cfg, db, pl)
+	service := app.New(config, catalog, player)
 
 	return &Deps{
-		Config:  cfg,
-		Catalog: db,
-		Player:  pl,
-		Service: svc,
-		Model:   tui.NewModel(svc),
+		Config:  config,
+		Catalog: catalog,
+		Player:  player,
+		Service: service,
+		Model:   tui.NewModel(service),
 	}, nil
 }
 
