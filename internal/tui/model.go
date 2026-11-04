@@ -722,7 +722,6 @@ func (m *Model) footerLines(width, leftWidth, count int) []string {
 		{"s", "stop"},
 		{"/", "search"},
 		{"d", "delete"},
-		{"E", "eq"},
 		{"q", "quit"},
 	})
 	lines[1] = truncate(hints, width)
