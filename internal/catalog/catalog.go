@@ -356,7 +356,7 @@ func (db *Repository) Available() bool {
 // Search returns stations whose name contains the query, up to limit.
 func (db *Repository) Search(query string, limit int) []station.Station {
 	query = strings.ToLower(strings.TrimSpace(query))
-	if query == "" {
+	if query == "" || limit <= 0 {
 		return nil
 	}
 

@@ -197,6 +197,16 @@ func TestLoadReadsCache(t *testing.T) {
 	}
 }
 
+func TestSearchRejectsNonPositiveLimit(t *testing.T) {
+	repo := &Repository{entries: []station.Station{{Name: "Jazz", URL: "https://example.com/jazz"}}}
+
+	for _, limit := range []int{0, -1} {
+		if got := repo.Search("jazz", limit); got != nil {
+			t.Fatalf("Search(limit=%d) = %+v, want nil", limit, got)
+		}
+	}
+}
+
 func TestBackoffBounds(t *testing.T) {
 	repo := New(Options{Retry: RetryPolicy{Attempts: 1, BaseDelay: 100 * time.Millisecond, MaxDelay: 150 * time.Millisecond}})
 
