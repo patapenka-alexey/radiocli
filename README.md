@@ -35,6 +35,7 @@ make                  # build ./radiocli
 make && sudo make install   # then install to /usr/local/bin
 make uninstall        # remove the installed binary
 make clean            # remove the local binary
+make check            # check formatting, vet and race tests
 ```
 
 `install` never builds, so `sudo` does not need `go` on root's `PATH`; always

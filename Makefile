@@ -1,10 +1,11 @@
 BINARY  := radiocli
 GO      ?= go
+GOFMT   ?= gofmt
 PREFIX  ?= /usr/local
 BINDIR  ?= $(PREFIX)/bin
 DESTDIR ?=
 
-.PHONY: all build install uninstall clean run fmt vet test
+.PHONY: all build install uninstall clean run fmt fmt-check vet test test-race check
 
 all: build
 
@@ -33,8 +34,20 @@ run:
 fmt:
 	$(GO) fmt ./...
 
+fmt-check:
+	@files="$$($(GOFMT) -l .)"; if [ -n "$$files" ]; then \
+		echo "gofmt required for:" >&2; \
+		echo "$$files" >&2; \
+		exit 1; \
+	fi
+
 vet:
 	$(GO) vet ./...
 
 test:
 	$(GO) test ./...
+
+test-race:
+	$(GO) test -race ./...
+
+check: fmt-check vet test-race
