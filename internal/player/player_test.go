@@ -2,6 +2,7 @@ package player
 
 import (
 	"net"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -10,6 +11,29 @@ import (
 
 func newTestPlayer() *MPV {
 	return &MPV{events: make(chan ports.Event, 16)}
+}
+
+func TestInstanceLockRejectsSecondInstance(t *testing.T) {
+	socketPath := filepath.Join(t.TempDir(), "radiocli.sock")
+	first := &MPV{socketPath: socketPath}
+	second := &MPV{socketPath: socketPath}
+
+	if err := first.acquireLock(); err != nil {
+		t.Fatalf("acquire first lock: %v", err)
+	}
+	defer first.releaseLock()
+
+	if err := second.acquireLock(); err == nil {
+		second.releaseLock()
+		t.Fatal("second instance acquired an already-held lock")
+	}
+
+	first.releaseLock()
+
+	if err := second.acquireLock(); err != nil {
+		t.Fatalf("acquire lock after release: %v", err)
+	}
+	second.releaseLock()
 }
 
 func TestHandleLinePublishesPropertyEvent(t *testing.T) {

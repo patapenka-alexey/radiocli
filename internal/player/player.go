@@ -25,6 +25,7 @@ var _ ports.Player = (*MPV)(nil)
 type MPV struct {
 	mpvPath    string
 	socketPath string
+	lock       *os.File
 
 	cmd      *exec.Cmd
 	conn     net.Conn
@@ -70,11 +71,46 @@ func New(mpvPath string) (*MPV, error) {
 		events:     make(chan ports.Event, 64),
 	}
 
+	if err := p.acquireLock(); err != nil {
+		return nil, err
+	}
+
 	if err := p.start(); err != nil {
+		p.releaseLock()
+
 		return nil, err
 	}
 
 	return p, nil
+}
+
+func (p *MPV) acquireLock() error {
+	lockPath := p.socketPath + ".lock"
+
+	f, err := os.OpenFile(lockPath, os.O_CREATE|os.O_RDWR, 0o600)
+	if err != nil {
+		return fmt.Errorf("open instance lock: %w", err)
+	}
+
+	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
+		f.Close()
+
+		return fmt.Errorf("another radiocli instance is already running: %w", err)
+	}
+
+	p.lock = f
+
+	return nil
+}
+
+func (p *MPV) releaseLock() {
+	if p.lock == nil {
+		return
+	}
+
+	_ = syscall.Flock(int(p.lock.Fd()), syscall.LOCK_UN)
+	_ = p.lock.Close()
+	p.lock = nil
 }
 
 // Events returns the channel of player state changes. The channel is closed
@@ -342,4 +378,5 @@ func (p *MPV) Quit() {
 	}
 
 	p.removeStaleSocket()
+	p.releaseLock()
 }
