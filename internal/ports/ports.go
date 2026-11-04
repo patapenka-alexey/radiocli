@@ -36,9 +36,9 @@ type Event struct {
 
 // Player is the playback control port.
 type Player interface {
-	Play(url string)
-	TogglePause()
-	Stop()
+	Play(url string) error
+	TogglePause() error
+	Stop() error
 	Status() PlayerStatus
 	Alive() bool
 	Quit()

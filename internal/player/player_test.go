@@ -1,6 +1,7 @@
 package player
 
 import (
+	"errors"
 	"net"
 	"path/filepath"
 	"testing"
@@ -34,6 +35,20 @@ func TestInstanceLockRejectsSecondInstance(t *testing.T) {
 		t.Fatalf("acquire lock after release: %v", err)
 	}
 	second.releaseLock()
+}
+
+func TestCommandsFailWithoutConnection(t *testing.T) {
+	p := newTestPlayer()
+
+	if err := p.Play("https://example.com/stream"); !errors.Is(err, ErrNotRunning) {
+		t.Fatalf("Play error = %v, want ErrNotRunning", err)
+	}
+	if err := p.TogglePause(); !errors.Is(err, ErrNotRunning) {
+		t.Fatalf("TogglePause error = %v, want ErrNotRunning", err)
+	}
+	if err := p.Stop(); !errors.Is(err, ErrNotRunning) {
+		t.Fatalf("Stop error = %v, want ErrNotRunning", err)
+	}
 }
 
 func TestHandleLinePublishesPropertyEvent(t *testing.T) {

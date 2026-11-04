@@ -45,11 +45,11 @@ func (fakeCatalog) Available() bool { return false }
 
 type fakePlayer struct{}
 
-func (fakePlayer) Play(string) {}
+func (fakePlayer) Play(string) error { return nil }
 
-func (fakePlayer) TogglePause() {}
+func (fakePlayer) TogglePause() error { return nil }
 
-func (fakePlayer) Stop() {}
+func (fakePlayer) Stop() error { return nil }
 
 func (fakePlayer) Status() ports.PlayerStatus { return ports.PlayerStatus{Alive: true} }
 

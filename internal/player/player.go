@@ -5,6 +5,7 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net"
 	"os"
@@ -18,6 +19,10 @@ import (
 )
 
 var _ ports.Player = (*MPV)(nil)
+
+// ErrNotRunning is returned when a command is sent to an mpv process that is
+// no longer connected.
+var ErrNotRunning = errors.New("mpv is not running")
 
 // MPV drives a long-lived `mpv` process over its JSON IPC socket. mpv is
 // started once with --idle=yes and all playback is controlled through the IPC
@@ -172,7 +177,7 @@ func (p *MPV) start() error {
 	go p.readLoop()
 
 	for _, obs := range observedProperties {
-		p.send([]any{"observe_property", obs.id, obs.name})
+		_ = p.send([]any{"observe_property", obs.id, obs.name})
 	}
 
 	return nil
@@ -300,9 +305,9 @@ func toFloat(v any) (float64, bool) {
 	}
 }
 
-func (p *MPV) send(command []any) {
+func (p *MPV) send(command []any) error {
 	if p.conn == nil {
-		return
+		return ErrNotRunning
 	}
 	p.sendMu.Lock()
 	defer p.sendMu.Unlock()
@@ -311,31 +316,39 @@ func (p *MPV) send(command []any) {
 	payload := map[string]any{"command": command, "request_id": p.requestID}
 	data, err := json.Marshal(payload)
 	if err != nil {
-		return
+		return err
 	}
 
 	data = append(data, '\n')
-	_, _ = p.conn.Write(data)
+	if _, err := p.conn.Write(data); err != nil {
+		return fmt.Errorf("write mpv command: %w", err)
+	}
+
+	return nil
 }
 
 // Play loads the given stream URL into mpv.
-func (p *MPV) Play(url string) {
-	p.send([]any{"loadfile", url, "replace"})
+func (p *MPV) Play(url string) error {
+	if err := p.send([]any{"loadfile", url, "replace"}); err != nil {
+		return err
+	}
 
 	p.mu.Lock()
 	p.idle = false
 	p.paused = false
 	p.mu.Unlock()
+
+	return nil
 }
 
 // TogglePause cycles the paused state.
-func (p *MPV) TogglePause() {
-	p.send([]any{"cycle", "pause"})
+func (p *MPV) TogglePause() error {
+	return p.send([]any{"cycle", "pause"})
 }
 
 // Stop stops playback.
-func (p *MPV) Stop() {
-	p.send([]any{"stop"})
+func (p *MPV) Stop() error {
+	return p.send([]any{"stop"})
 }
 
 // Status returns a consistent copy of the observed player state.
@@ -362,7 +375,7 @@ func (p *MPV) Alive() bool {
 // Quit asks mpv to exit and waits for the process to finish.
 func (p *MPV) Quit() {
 	if p.conn != nil {
-		p.send([]any{"quit"})
+		_ = p.send([]any{"quit"})
 		_ = p.conn.Close()
 	}
 

@@ -2,6 +2,7 @@ package tui
 
 import (
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	tea "charm.land/bubbletea/v2"
@@ -128,11 +129,13 @@ func (m *Model) execute(cmd command) tea.Cmd {
 	case cmdTogglePause:
 		if m.app.Status().Idle {
 			m.playSelectedStation()
-		} else {
-			m.app.TogglePause()
+		} else if err := m.app.TogglePause(); err != nil {
+			m.flash(err.Error(), 5*time.Second)
 		}
 	case cmdStop:
-		m.app.Stop()
+		if err := m.app.Stop(); err != nil {
+			m.flash(err.Error(), 5*time.Second)
+		}
 	case cmdOpenSearch:
 		m.state = stateSearch
 		m.searchQuery = ""

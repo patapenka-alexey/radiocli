@@ -63,19 +63,38 @@ func (f *fakeCatalog) Count() int { return len(f.results) }
 func (f *fakeCatalog) Available() bool { return len(f.results) > 0 }
 
 type fakePlayer struct {
-	alive   bool
-	played  []string
-	toggles int
-	stops   int
-	status  ports.PlayerStatus
-	events  chan ports.Event
+	alive     bool
+	played    []string
+	toggles   int
+	stops     int
+	status    ports.PlayerStatus
+	events    chan ports.Event
+	playErr   error
+	toggleErr error
+	stopErr   error
 }
 
-func (f *fakePlayer) Play(url string) { f.played = append(f.played, url) }
+func (f *fakePlayer) Play(url string) error {
+	if f.playErr != nil {
+		return f.playErr
+	}
 
-func (f *fakePlayer) TogglePause() { f.toggles++ }
+	f.played = append(f.played, url)
 
-func (f *fakePlayer) Stop() { f.stops++ }
+	return nil
+}
+
+func (f *fakePlayer) TogglePause() error {
+	f.toggles++
+
+	return f.toggleErr
+}
+
+func (f *fakePlayer) Stop() error {
+	f.stops++
+
+	return f.stopErr
+}
 
 func (f *fakePlayer) Status() ports.PlayerStatus { return f.status }
 
@@ -125,13 +144,64 @@ func TestStopClearsCurrentStation(t *testing.T) {
 	if err := svc.Play(station.Station{Name: "Jazz", URL: "https://example.com/jazz"}); err != nil {
 		t.Fatalf("Play: %v", err)
 	}
-	svc.Stop()
+	if err := svc.Stop(); err != nil {
+		t.Fatalf("Stop: %v", err)
+	}
 
 	if svc.CurrentStation() != "" {
 		t.Fatalf("CurrentStation() = %q, want empty", svc.CurrentStation())
 	}
 	if pl.stops != 1 {
 		t.Fatalf("stops = %d, want 1", pl.stops)
+	}
+}
+
+func TestPlayKeepsCurrentStationOnPlayerError(t *testing.T) {
+	playErr := errors.New("send failed")
+	pl := &fakePlayer{alive: true, playErr: playErr}
+	svc := New(&fakeStore{}, &fakeCatalog{}, pl)
+
+	err := svc.Play(station.Station{Name: "Jazz", URL: "https://example.com/jazz"})
+
+	if !errors.Is(err, playErr) {
+		t.Fatalf("Play error = %v, want %v", err, playErr)
+	}
+	if svc.CurrentStation() != "" {
+		t.Fatalf("CurrentStation() = %q, want empty", svc.CurrentStation())
+	}
+}
+
+func TestStopKeepsCurrentStationOnPlayerError(t *testing.T) {
+	stopErr := errors.New("send failed")
+	pl := &fakePlayer{alive: true, stopErr: stopErr}
+	svc := New(&fakeStore{}, &fakeCatalog{}, pl)
+
+	if err := svc.Play(station.Station{Name: "Jazz", URL: "https://example.com/jazz"}); err != nil {
+		t.Fatalf("Play: %v", err)
+	}
+
+	err := svc.Stop()
+
+	if !errors.Is(err, stopErr) {
+		t.Fatalf("Stop error = %v, want %v", err, stopErr)
+	}
+	if svc.CurrentStation() != "Jazz" {
+		t.Fatalf("CurrentStation() = %q, want Jazz", svc.CurrentStation())
+	}
+}
+
+func TestTogglePauseReturnsPlayerError(t *testing.T) {
+	toggleErr := errors.New("send failed")
+	pl := &fakePlayer{alive: true, toggleErr: toggleErr}
+	svc := New(&fakeStore{}, &fakeCatalog{}, pl)
+
+	err := svc.TogglePause()
+
+	if !errors.Is(err, toggleErr) {
+		t.Fatalf("TogglePause error = %v, want %v", err, toggleErr)
+	}
+	if pl.toggles != 1 {
+		t.Fatalf("toggles = %d, want 1", pl.toggles)
 	}
 }
 

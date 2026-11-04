@@ -76,21 +76,29 @@ func (s *Service) Play(st station.Station) error {
 		return ErrPlayerNotRunning
 	}
 
+	if err := s.player.Play(st.URL); err != nil {
+		return err
+	}
+
 	s.currentStation = st.Name
-	s.player.Play(st.URL)
 
 	return nil
 }
 
 // TogglePause toggles playback pause.
-func (s *Service) TogglePause() {
-	s.player.TogglePause()
+func (s *Service) TogglePause() error {
+	return s.player.TogglePause()
 }
 
 // Stop stops playback and clears the current station.
-func (s *Service) Stop() {
-	s.player.Stop()
+func (s *Service) Stop() error {
+	if err := s.player.Stop(); err != nil {
+		return err
+	}
+
 	s.currentStation = ""
+
+	return nil
 }
 
 // Status returns the current player status.
