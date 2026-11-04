@@ -87,16 +87,16 @@ func (c *Store) AddStation(name, url string) error {
 	name = strings.TrimSpace(name)
 	url = strings.TrimSpace(url)
 	if name == "" || url == "" {
-		return errors.New("Station must have a name and a url")
+		return errors.New("station must have a name and a url")
 	}
 
 	for _, s := range c.stations {
 		if s.URL == url {
-			return fmt.Errorf("Another station (%s) already uses this url", s.Name)
+			return fmt.Errorf("another station (%s) already uses this url", s.Name)
 		}
 
 		if s.Name == name {
-			return fmt.Errorf("A station named '%s' already exists. Rename the station.", name)
+			return fmt.Errorf("a station named '%s' already exists; rename the station", name)
 		}
 	}
 

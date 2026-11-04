@@ -71,7 +71,8 @@ radiocli unpause    # resume it
 
 The commands are silent on success and exit non-zero with an error if no
 `radiocli` instance is running. The UI updates immediately, since it observes
-mpv's `pause` property.
+mpv's `pause` property. Use `radiocli --help` for the full command list and
+`radiocli --version` to print the version.
 
 ## Configuration
 
