@@ -79,6 +79,10 @@ The station list and mpv path are stored in `config.json`, at
 `~/.config/radiocli/config.json` (following `$XDG_CONFIG_HOME`). Set
 `RADIOCLI_CONFIG` to use a different path.
 
+An example configuration is shipped as `config.example.json`; the application
+never reads that file directly. Copy it to the path above if you want to start
+from it.
+
 The file is only written when you add (`Ctrl+A` while searching) or delete
 (`d`) a station; until then the in-memory defaults below are used. Example:
 
