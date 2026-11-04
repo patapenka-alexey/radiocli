@@ -1,6 +1,7 @@
 package config
 
 import (
+	"os"
 	"path/filepath"
 	"testing"
 )
@@ -31,6 +32,49 @@ func TestSaveLoadRoundTrip(t *testing.T) {
 	}
 	if reloaded.MpvPath() != "mpv" {
 		t.Fatalf("MpvPath() = %q, want %q", reloaded.MpvPath(), "mpv")
+	}
+}
+
+func TestMissingConfigUsesDefaults(t *testing.T) {
+	t.Setenv("RADIOCLI_CONFIG", filepath.Join(t.TempDir(), "config.json"))
+
+	cfg := Load()
+
+	if got := len(cfg.Stations()); got == 0 {
+		t.Fatal("missing config did not load default stations")
+	}
+}
+
+func TestExplicitEmptyStationListIsPreserved(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.json")
+	t.Setenv("RADIOCLI_CONFIG", path)
+
+	if err := os.WriteFile(path, []byte(`{"stations":[]}`), 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	cfg := Load()
+
+	if got := len(cfg.Stations()); got != 0 {
+		t.Fatalf("Stations() = %d, want 0", got)
+	}
+}
+
+func TestRemovingAllStationsPersists(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.json")
+	t.Setenv("RADIOCLI_CONFIG", path)
+
+	cfg := Load()
+	for _, s := range cfg.Stations() {
+		cfg.RemoveStation(s.Name)
+	}
+	if err := cfg.Save(); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+
+	reloaded := Load()
+	if got := len(reloaded.Stations()); got != 0 {
+		t.Fatalf("Stations() = %d, want 0 after reload", got)
 	}
 }
 

@@ -45,7 +45,7 @@ type Store struct {
 }
 
 // Load reads the configuration from disk, falling back to the built-in
-// defaults when the file is missing or empty.
+// defaults only when the file is missing, unreadable or has no stations key.
 func Load() *Store {
 	path := paths.ConfigPath()
 	cfg := &Store{mpvPath: "mpv", path: path}
@@ -64,7 +64,7 @@ func Load() *Store {
 		}
 	}
 
-	if len(cfg.stations) == 0 {
+	if cfg.stations == nil {
 		cfg.stations = defaultStations()
 	}
 
@@ -137,10 +137,15 @@ func (c *Store) Save() error {
 	enc.SetEscapeHTML(false)
 	enc.SetIndent("", "  ")
 
+	stations := c.stations
+	if stations == nil {
+		stations = []station.Station{}
+	}
+
 	file := struct {
 		Stations []station.Station `json:"stations"`
 		MpvPath  string            `json:"mpv_path"`
-	}{Stations: c.stations, MpvPath: c.mpvPath}
+	}{Stations: stations, MpvPath: c.mpvPath}
 
 	if err := enc.Encode(file); err != nil {
 		f.Close()
