@@ -15,6 +15,8 @@ const (
 	cmdNone command = iota
 	cmdMoveUp
 	cmdMoveDown
+	cmdMoveSearchUp
+	cmdMoveSearchDown
 	cmdPlayStation
 	cmdPlaySearch
 	cmdTogglePause
@@ -54,8 +56,8 @@ var navigateKeyMap = keyMap{
 }
 
 var searchKeyMap = keyMap{
-	"up":        cmdMoveUp,
-	"down":      cmdMoveDown,
+	"up":        cmdMoveSearchUp,
+	"down":      cmdMoveSearchDown,
 	"enter":     cmdPlaySearch,
 	"esc":       cmdCancelSearch,
 	"backspace": cmdBackspace,
@@ -121,6 +123,10 @@ func (m *Model) execute(cmd command) tea.Cmd {
 		m.moveStation(-1)
 	case cmdMoveDown:
 		m.moveStation(1)
+	case cmdMoveSearchUp:
+		m.moveSearch(-1)
+	case cmdMoveSearchDown:
+		m.moveSearch(1)
 	case cmdPlayStation:
 		m.playSelectedStation()
 	case cmdPlaySearch:

@@ -318,6 +318,11 @@ func (m *Model) moveStation(delta int) {
 	m.stationIndex = min(max(0, last), max(0, m.stationIndex+delta))
 }
 
+func (m *Model) moveSearch(delta int) {
+	last := len(m.searchResults) - 1
+	m.searchIndex = min(max(0, last), max(0, m.searchIndex+delta))
+}
+
 const (
 	remotePause    = "pause"
 	remoteUnpause  = "unpause"

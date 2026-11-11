@@ -17,6 +17,8 @@ func TestKeyMapsPerState(t *testing.T) {
 		{stateNavigate, "q", cmdRequestQuit},
 		{stateNavigate, "/", cmdOpenSearch},
 		{stateNavigate, "enter", cmdPlayStation},
+		{stateSearch, "up", cmdMoveSearchUp},
+		{stateSearch, "down", cmdMoveSearchDown},
 		{stateSearch, "ctrl+a", cmdAddSearch},
 		{stateSearch, "ctrl+u", cmdRefresh},
 		{stateSearch, "esc", cmdCancelSearch},
@@ -124,6 +126,38 @@ func TestRefreshCommandInSearch(t *testing.T) {
 	}
 	if m.searchQuery != "" {
 		t.Fatalf("searchQuery = %q, want empty", m.searchQuery)
+	}
+}
+
+func TestSearchArrowsMoveSearchSelection(t *testing.T) {
+	m := newTestModelWith(
+		station.Station{Name: "A"},
+		station.Station{Name: "B"},
+	)
+	m.state = stateSearch
+	m.searchResults = []station.Station{
+		{Name: "Result 1"},
+		{Name: "Result 2"},
+	}
+	m.searchIndex = 0
+	m.stationIndex = 1
+
+	m.handleKey(tea.KeyPressMsg{Code: tea.KeyDown})
+	if m.searchIndex != 1 {
+		t.Fatalf("searchIndex = %d, want 1", m.searchIndex)
+	}
+	if m.stationIndex != 1 {
+		t.Fatalf("stationIndex = %d, want 1 (unchanged)", m.stationIndex)
+	}
+
+	m.handleKey(tea.KeyPressMsg{Code: tea.KeyDown})
+	if m.searchIndex != 1 {
+		t.Fatalf("searchIndex = %d, want 1 (clamped)", m.searchIndex)
+	}
+
+	m.handleKey(tea.KeyPressMsg{Code: tea.KeyUp})
+	if m.searchIndex != 0 {
+		t.Fatalf("searchIndex = %d, want 0", m.searchIndex)
 	}
 }
 
