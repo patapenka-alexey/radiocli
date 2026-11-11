@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -12,6 +13,17 @@ import (
 
 func newTestPlayer() *MPV {
 	return &MPV{events: make(chan ports.Event, 16)}
+}
+
+type recordingConn struct {
+	net.Conn
+	writes []string
+}
+
+func (c *recordingConn) Write(b []byte) (int, error) {
+	c.writes = append(c.writes, string(b))
+
+	return len(b), nil
 }
 
 func TestInstanceLockRejectsSecondInstance(t *testing.T) {
@@ -48,6 +60,30 @@ func TestCommandsFailWithoutConnection(t *testing.T) {
 	}
 	if err := p.Stop(); !errors.Is(err, ErrNotRunning) {
 		t.Fatalf("Stop error = %v, want ErrNotRunning", err)
+	}
+}
+
+func TestPlayLoadsAndUnpauses(t *testing.T) {
+	conn := &recordingConn{}
+	p := newTestPlayer()
+	p.conn = conn
+
+	if err := p.Play("https://example.com/stream"); err != nil {
+		t.Fatalf("Play: %v", err)
+	}
+
+	if len(conn.writes) != 2 {
+		t.Fatalf("writes = %d, want 2: %v", len(conn.writes), conn.writes)
+	}
+	if !strings.Contains(conn.writes[0], `"loadfile"`) || !strings.Contains(conn.writes[0], "https://example.com/stream") {
+		t.Fatalf("first write = %q, want loadfile", conn.writes[0])
+	}
+	if !strings.Contains(conn.writes[1], `"set_property"`) || !strings.Contains(conn.writes[1], `"pause"`) || !strings.Contains(conn.writes[1], "false") {
+		t.Fatalf("second write = %q, want pause=false", conn.writes[1])
+	}
+
+	if status := p.Status(); status.Paused || status.Idle {
+		t.Fatalf("status = %+v, want playing", status)
 	}
 }
 

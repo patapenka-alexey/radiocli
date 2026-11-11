@@ -3,68 +3,54 @@ package control
 
 import (
 	"bufio"
-	"encoding/json"
 	"fmt"
 	"net"
+	"strings"
 	"time"
 
 	"radiocli/internal/paths"
 )
 
-// Run handles the remote-control subcommands. It talks to the mpv instance
-// started by the running TUI, so the TUI reflects the change via its property
-// observers. Success is silent.
+// Run handles the remote-control subcommands. It forwards them to the running
+// TUI over its control socket; the TUI then drives mpv. Success is silent.
 func Run(args []string) error {
 	switch args[0] {
 	case "pause":
-		return sendCommand([]any{"set_property", "pause", true})
+		return sendAction(ActionPause)
 	case "unpause":
-		return sendCommand([]any{"set_property", "pause", false})
+		return sendAction(ActionUnpause)
+	case "next":
+		return sendAction(ActionNext)
+	case "previous":
+		return sendAction(ActionPrevious)
 	default:
-		return fmt.Errorf("unknown command %q (available: pause, unpause)", args[0])
+		return fmt.Errorf("unknown command %q", args[0])
 	}
 }
 
-func sendCommand(command []any) error {
-	conn, err := net.DialTimeout("unix", paths.ControlSocketPath(), 2*time.Second)
+// sendAction forwards an action to the TUI control socket. Success is silent.
+func sendAction(action Action) error {
+	conn, err := net.DialTimeout("unix", paths.TUIControlSocketPath(), 2*time.Second)
 	if err != nil {
 		return fmt.Errorf("radiocli is not running")
 	}
 	defer conn.Close()
 
-	payload := map[string]any{"command": command, "request_id": 1}
-	data, err := json.Marshal(payload)
+	_ = conn.SetDeadline(time.Now().Add(2 * time.Second))
+
+	if _, err := fmt.Fprintf(conn, "%s\n", action); err != nil {
+		return err
+	}
+
+	reply, err := bufio.NewReader(conn).ReadString('\n')
 	if err != nil {
 		return err
 	}
-	data = append(data, '\n')
 
-	_ = conn.SetDeadline(time.Now().Add(2 * time.Second))
-	if _, err := conn.Write(data); err != nil {
-		return err
+	reply = strings.TrimSpace(reply)
+	if reply == "ok" {
+		return nil
 	}
 
-	reader := bufio.NewReader(conn)
-	for {
-		line, err := reader.ReadBytes('\n')
-		if err != nil {
-			return err
-		}
-
-		var msg map[string]any
-		if json.Unmarshal(line, &msg) != nil {
-			continue
-		}
-
-		id, ok := msg["request_id"].(float64)
-		if !ok || int(id) != 1 {
-			continue
-		}
-
-		if msg["error"] == "success" {
-			return nil
-		}
-
-		return fmt.Errorf("mpv: %v", msg["error"])
-	}
+	return fmt.Errorf("%s", strings.TrimPrefix(reply, "error: "))
 }

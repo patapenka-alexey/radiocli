@@ -61,17 +61,23 @@ run `make` first. Install path can be changed with
 
 ## Remote control
 
-The running instance opens an mpv JSON IPC socket, so you can pause and resume
-playback from another terminal without touching the UI:
+The running instance opens a control socket, so you can pause, resume and
+switch stations from another terminal without touching the UI:
 
 ```sh
 radiocli pause      # pause the running instance
 radiocli unpause    # resume it
+radiocli next       # switch to the next station
+radiocli previous   # switch to the previous station
 ```
+
+All commands go through a small control socket owned by the running TUI, which
+then drives mpv. `next` and `previous` wrap around at the ends of the station
+list.
 
 The commands are silent on success and exit non-zero with an error if no
 `radiocli` instance is running. The UI updates immediately, since it observes
-mpv's `pause` property. Use `radiocli --help` for the full command list and
+mpv's properties. Use `radiocli --help` for the full command list and
 `radiocli --version` to print the version.
 
 ## Configuration
@@ -148,7 +154,7 @@ refreshes use cache-aside with mirror failover, exponential backoff and jitter.
 | `internal/config` | Configuration load/save and station management |
 | `internal/catalog` | radio-browser.info fetch, cache and search |
 | `internal/player` | mpv JSON IPC controller and event stream |
-| `internal/control` | Remote-control subcommands (`pause` / `unpause`) |
+| `internal/control` | Remote-control subcommands and TUI control socket |
 | `internal/paths` | Config, cache and socket locations |
 | `Makefile` | Build and install targets |
 

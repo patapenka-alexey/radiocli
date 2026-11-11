@@ -37,6 +37,12 @@ type flashExpiredMsg struct {
 	id int
 }
 
+// RemoteCommandMsg asks the model to perform a remote-control action, such as
+// pausing playback or switching stations.
+type RemoteCommandMsg struct {
+	Command string
+}
+
 // Model is the Bubble Tea model for the radiocli TUI.
 type Model struct {
 	app *app.Service
@@ -163,6 +169,11 @@ func (m *Model) update(msg tea.Msg) tea.Cmd {
 			m.message = ""
 			m.messageUntil = time.Time{}
 		}
+
+		return nil
+
+	case RemoteCommandMsg:
+		m.handleRemote(msg.Command)
 
 		return nil
 	}
@@ -305,6 +316,76 @@ func (m *Model) cancelQuit() {
 func (m *Model) moveStation(delta int) {
 	last := len(m.app.Stations()) - 1
 	m.stationIndex = min(max(0, last), max(0, m.stationIndex+delta))
+}
+
+const (
+	remotePause    = "pause"
+	remoteUnpause  = "unpause"
+	remoteNext     = "next"
+	remotePrevious = "previous"
+)
+
+// handleRemote applies a remote-control action. Unknown actions are ignored.
+func (m *Model) handleRemote(command string) {
+	switch command {
+	case remotePause:
+		m.setPaused(true)
+	case remoteUnpause:
+		m.setPaused(false)
+	case remoteNext:
+		m.switchStation(1)
+	case remotePrevious:
+		m.switchStation(-1)
+	}
+}
+
+// setPaused pauses or resumes playback, toggling only when the current state
+// differs from the requested one.
+func (m *Model) setPaused(paused bool) {
+	if m.app.Status().Paused == paused {
+		return
+	}
+
+	if err := m.app.TogglePause(); err != nil {
+		m.flash(err.Error(), 5*time.Second)
+	}
+}
+
+// switchStation plays the station delta positions from the one currently
+// playing (or from the selection when nothing is playing), wrapping around.
+func (m *Model) switchStation(delta int) {
+	stations := m.app.Stations()
+	if len(stations) == 0 {
+		m.flash("No stations", 3*time.Second)
+
+		return
+	}
+
+	index := m.currentStationIndex(stations)
+	if index < 0 {
+		index = min(max(0, m.stationIndex), len(stations)-1)
+	}
+
+	index = (index + delta + len(stations)) % len(stations)
+	m.stationIndex = index
+	m.playStation(stations[index])
+}
+
+// currentStationIndex returns the position of the playing station in the list,
+// or -1 when nothing is playing or it is no longer listed.
+func (m *Model) currentStationIndex(stations []station.Station) int {
+	name := m.app.CurrentStation()
+	if name == "" {
+		return -1
+	}
+
+	for i, s := range stations {
+		if s.Name == name {
+			return i
+		}
+	}
+
+	return -1
 }
 
 func (m *Model) updateSearch() {

@@ -327,9 +327,14 @@ func (p *MPV) send(command []any) error {
 	return nil
 }
 
-// Play loads the given stream URL into mpv.
+// Play loads the given stream URL into mpv and unpauses it. mpv keeps the pause
+// property across loadfile, so the explicit unpause is required to start audio.
 func (p *MPV) Play(url string) error {
 	if err := p.send([]any{"loadfile", url, "replace"}); err != nil {
+		return err
+	}
+
+	if err := p.send([]any{"set_property", "pause", false}); err != nil {
 		return err
 	}
 

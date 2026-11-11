@@ -43,28 +43,43 @@ func (fakeCatalog) Count() int { return 0 }
 
 func (fakeCatalog) Available() bool { return false }
 
-type fakePlayer struct{}
+type fakePlayer struct {
+	played  []string
+	paused  bool
+	toggles int
+}
 
-func (fakePlayer) Play(string) error { return nil }
+func (f *fakePlayer) Play(url string) error {
+	f.played = append(f.played, url)
 
-func (fakePlayer) TogglePause() error { return nil }
+	return nil
+}
 
-func (fakePlayer) Stop() error { return nil }
+func (f *fakePlayer) TogglePause() error {
+	f.paused = !f.paused
+	f.toggles++
 
-func (fakePlayer) Status() ports.PlayerStatus { return ports.PlayerStatus{Alive: true} }
+	return nil
+}
 
-func (fakePlayer) Alive() bool { return true }
+func (*fakePlayer) Stop() error { return nil }
 
-func (fakePlayer) Quit() {}
+func (f *fakePlayer) Status() ports.PlayerStatus {
+	return ports.PlayerStatus{Alive: true, Paused: f.paused}
+}
 
-func (fakePlayer) Events() <-chan ports.Event { return nil }
+func (*fakePlayer) Alive() bool { return true }
+
+func (*fakePlayer) Quit() {}
+
+func (*fakePlayer) Events() <-chan ports.Event { return nil }
 
 func newTestModel(stations int) *Model {
-	return NewModel(app.New(&fakeStore{stations: make([]station.Station, stations)}, fakeCatalog{}, fakePlayer{}))
+	return newTestModelWith(make([]station.Station, stations)...)
 }
 
 func newTestModelWith(stations ...station.Station) *Model {
-	return NewModel(app.New(&fakeStore{stations: stations}, fakeCatalog{}, fakePlayer{}))
+	return NewModel(app.New(&fakeStore{stations: stations}, fakeCatalog{}, &fakePlayer{}))
 }
 
 func TestClampOffset(t *testing.T) {

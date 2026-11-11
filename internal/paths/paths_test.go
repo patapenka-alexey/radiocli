@@ -38,3 +38,15 @@ func TestDefaultPathsFollowConfigDir(t *testing.T) {
 		t.Fatalf("CatalogPath() = %q, want %q", got, want)
 	}
 }
+
+func TestControlSocketPathsDiffer(t *testing.T) {
+	mpv := ControlSocketPath()
+	tui := TUIControlSocketPath()
+
+	if mpv == tui {
+		t.Fatalf("ControlSocketPath() and TUIControlSocketPath() are the same: %q", mpv)
+	}
+	if want := mpv + ".tui"; tui != want {
+		t.Fatalf("TUIControlSocketPath() = %q, want %q", tui, want)
+	}
+}

@@ -10,6 +10,8 @@ import (
 
 	"radiocli/internal/bootstrap"
 	"radiocli/internal/control"
+	"radiocli/internal/paths"
+	"radiocli/internal/tui"
 )
 
 const usage = `Usage:
@@ -21,6 +23,8 @@ const usage = `Usage:
 Commands:
   pause                    pause the running instance
   unpause                  resume the running instance
+  next                     play the next station
+  previous                 play the previous station
 `
 
 func main() {
@@ -66,6 +70,17 @@ func runTUI(stderr io.Writer) int {
 	defer deps.Close()
 
 	prog := tea.NewProgram(deps.Model)
+
+	server, err := control.Listen(paths.TUIControlSocketPath(), func(action control.Action) {
+		prog.Send(tui.RemoteCommandMsg{Command: string(action)})
+	})
+	if err != nil {
+		fmt.Fprintf(stderr, "radiocli: %v\n", err)
+
+		return 1
+	}
+	defer server.Close()
+
 	if _, err := prog.Run(); err != nil {
 		fmt.Fprintf(stderr, "radiocli: %v\n", err)
 

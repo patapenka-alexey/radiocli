@@ -26,6 +26,13 @@ func ControlSocketPath() string {
 	return fmt.Sprintf("/tmp/radiocli-%d.sock", os.Getuid())
 }
 
+// TUIControlSocketPath is the socket used by remote-control commands that need
+// TUI state, such as pausing playback or switching stations. It is derived from
+// the mpv socket path so it can never collide with it.
+func TUIControlSocketPath() string {
+	return ControlSocketPath() + ".tui"
+}
+
 func overridePath(env, fallback string) string {
 	if override := os.Getenv(env); override != "" {
 		if abs, err := filepath.Abs(override); err == nil {
