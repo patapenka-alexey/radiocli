@@ -154,3 +154,13 @@ func TestFooterSeparatorAboveHints(t *testing.T) {
 		t.Fatalf("hint line = %q", lines[1])
 	}
 }
+
+func TestNowPlayingShowsStreamURL(t *testing.T) {
+	m := newTestModelWith(station.Station{Name: "Jazz", URL: "https://example.com/jazz"})
+	m.playStation(m.app.Stations()[0])
+
+	joined := strings.Join(m.nowPlayingLines(), "\n")
+	if !strings.Contains(joined, "https://example.com/jazz") {
+		t.Fatalf("now playing lines do not contain the stream URL: %q", joined)
+	}
+}

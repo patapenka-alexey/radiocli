@@ -18,7 +18,7 @@ type Service struct {
 	catalog ports.Catalog
 	player  ports.Player
 
-	currentStation string
+	current station.Station
 }
 
 // New creates an application service.
@@ -43,8 +43,8 @@ func (s *Service) AddStation(name, url string) error {
 // RemoveStation removes a station and persists the list.
 func (s *Service) RemoveStation(name string) error {
 	s.store.RemoveStation(name)
-	if s.currentStation == name {
-		s.currentStation = ""
+	if s.current.Name == name {
+		s.current = station.Station{}
 	}
 
 	return s.store.Save()
@@ -80,7 +80,7 @@ func (s *Service) Play(st station.Station) error {
 		return err
 	}
 
-	s.currentStation = st.Name
+	s.current = st
 
 	return nil
 }
@@ -96,7 +96,7 @@ func (s *Service) Stop() error {
 		return err
 	}
 
-	s.currentStation = ""
+	s.current = station.Station{}
 
 	return nil
 }
@@ -113,7 +113,12 @@ func (s *Service) Alive() bool {
 
 // CurrentStation returns the name of the station being played, if any.
 func (s *Service) CurrentStation() string {
-	return s.currentStation
+	return s.current.Name
+}
+
+// CurrentStationURL returns the stream URL of the station being played, if any.
+func (s *Service) CurrentStationURL() string {
+	return s.current.URL
 }
 
 // Events returns player state-change notifications. The channel is closed when

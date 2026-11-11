@@ -115,6 +115,9 @@ func TestPlaySetsCurrentStation(t *testing.T) {
 	if svc.CurrentStation() != "Jazz" {
 		t.Fatalf("CurrentStation() = %q, want Jazz", svc.CurrentStation())
 	}
+	if svc.CurrentStationURL() != "https://example.com/jazz" {
+		t.Fatalf("CurrentStationURL() = %q, want the stream URL", svc.CurrentStationURL())
+	}
 	if len(pl.played) != 1 || pl.played[0] != "https://example.com/jazz" {
 		t.Fatalf("played = %v", pl.played)
 	}
@@ -150,6 +153,9 @@ func TestStopClearsCurrentStation(t *testing.T) {
 
 	if svc.CurrentStation() != "" {
 		t.Fatalf("CurrentStation() = %q, want empty", svc.CurrentStation())
+	}
+	if svc.CurrentStationURL() != "" {
+		t.Fatalf("CurrentStationURL() = %q, want empty", svc.CurrentStationURL())
 	}
 	if pl.stops != 1 {
 		t.Fatalf("stops = %d, want 1", pl.stops)
@@ -246,6 +252,9 @@ func TestRemoveStationClearsCurrentAndPersists(t *testing.T) {
 
 	if svc.CurrentStation() != "" {
 		t.Fatalf("CurrentStation() = %q, want empty", svc.CurrentStation())
+	}
+	if svc.CurrentStationURL() != "" {
+		t.Fatalf("CurrentStationURL() = %q, want empty", svc.CurrentStationURL())
 	}
 	if store.saveCalls != 1 {
 		t.Fatalf("saveCalls = %d, want 1", store.saveCalls)

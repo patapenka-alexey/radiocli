@@ -59,6 +59,10 @@ run `make` first. Install path can be changed with
 | `Ctrl+Z` | Suspend (playback keeps running) |
 | `q` / `Ctrl+C` | Quit (asks for confirmation) |
 
+The **Now Playing** panel shows the station name, the stream URL (a clickable
+link in terminals that support OSC 8 hyperlinks), the current track title and
+the playback status.
+
 ## Remote control
 
 The running instance opens a control socket, so you can pause, resume and

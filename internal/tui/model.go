@@ -726,10 +726,18 @@ func (m *Model) nowPlayingLines() []string {
 		title = "-"
 	}
 
+	streamURL := m.app.CurrentStationURL()
+	if streamURL == "" {
+		streamURL = "-"
+	} else {
+		streamURL = hyperlink(streamURL)
+	}
+
 	lines := []string{
 		style(ansiCyan, "Now Playing"),
 		"",
 		labelValue("Station", stationName, ""),
+		labelValue("Stream", streamURL, ""),
 		labelValue("Title", title, ""),
 		labelValue("Status", status, statusStyle),
 	}
@@ -744,6 +752,12 @@ func (m *Model) nowPlayingLines() []string {
 
 func labelValue(label, value, valueStyle string) string {
 	return style(ansiDim, fmt.Sprintf("%-8s", label)) + " " + style(valueStyle, value)
+}
+
+// hyperlink wraps text in an OSC 8 hyperlink so terminals that support it can
+// open the URL directly. Other terminals render the text unchanged.
+func hyperlink(url string) string {
+	return ansi.SetHyperlink(url) + url + ansi.ResetHyperlink()
 }
 
 func fmtTime(seconds float64) string {
