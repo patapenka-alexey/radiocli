@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"time"
@@ -24,6 +25,7 @@ const (
 )
 
 type stationsRefreshedMsg struct {
+	id  int
 	err error
 }
 
@@ -36,6 +38,12 @@ type playerExitedMsg struct{}
 type flashExpiredMsg struct {
 	id int
 }
+
+type refreshTickMsg struct {
+	id int
+}
+
+var refreshSpinner = []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
 
 // RemoteCommandMsg asks the model to perform a remote-control action, such as
 // pausing playback or switching stations.
@@ -68,6 +76,10 @@ type Model struct {
 	quitResume       state
 	mpvExitNotified  bool
 	refreshing       bool
+	refreshFrame     int
+	refreshStarted   time.Time
+	refreshID        int
+	refreshCancel    context.CancelFunc
 }
 
 // NewModel creates the TUI model with the application service.
@@ -86,10 +98,16 @@ func waitForPlayerEvent(events <-chan ports.Event) tea.Cmd {
 	}
 }
 
-func fetchStationsCmd(svc *app.Service) tea.Cmd {
+func fetchStationsCmd(ctx context.Context, svc *app.Service, id int) tea.Cmd {
 	return func() tea.Msg {
-		return stationsRefreshedMsg{err: svc.Refresh()}
+		return stationsRefreshedMsg{id: id, err: svc.RefreshContext(ctx)}
 	}
+}
+
+func refreshTickCmd(id int) tea.Cmd {
+	return tea.Tick(100*time.Millisecond, func(time.Time) tea.Msg {
+		return refreshTickMsg{id: id}
+	})
 }
 
 func (m *Model) startRefresh() tea.Cmd {
@@ -97,10 +115,36 @@ func (m *Model) startRefresh() tea.Cmd {
 		return nil
 	}
 
+	ctx, cancel := context.WithCancel(context.Background())
+
+	m.refreshID++
 	m.refreshing = true
+	m.refreshFrame = 0
+	m.refreshStarted = time.Now()
+	m.refreshCancel = cancel
 	m.flash("Updating station list...", 30*time.Second)
 
-	return fetchStationsCmd(m.app)
+	id := m.refreshID
+
+	return tea.Batch(fetchStationsCmd(ctx, m.app, id), refreshTickCmd(id))
+}
+
+// cancelRefresh stops an in-progress station list update and releases the UI.
+func (m *Model) cancelRefresh() {
+	if !m.refreshing {
+		return
+	}
+
+	if m.refreshCancel != nil {
+		m.refreshCancel()
+		m.refreshCancel = nil
+	}
+
+	m.refreshID++
+	m.refreshing = false
+	m.refreshFrame = 0
+	m.refreshStarted = time.Time{}
+	m.flash("Update cancelled", 3*time.Second)
 }
 
 func (m *Model) Init() tea.Cmd {
@@ -139,8 +183,29 @@ func (m *Model) update(msg tea.Msg) tea.Cmd {
 	case tea.KeyPressMsg:
 		return m.handleKey(msg)
 
+	case refreshTickMsg:
+		if !m.refreshing || (msg.id != 0 && msg.id != m.refreshID) {
+			return nil
+		}
+
+		m.refreshFrame++
+		m.message = m.refreshStatus()
+
+		return refreshTickCmd(m.refreshID)
+
 	case stationsRefreshedMsg:
+		if msg.id != 0 && msg.id != m.refreshID {
+			return nil
+		}
+
+		if m.refreshCancel != nil {
+			m.refreshCancel()
+			m.refreshCancel = nil
+		}
+
 		m.refreshing = false
+		m.refreshFrame = 0
+		m.refreshStarted = time.Time{}
 
 		if msg.err != nil {
 			m.flash("Station list update failed", 5*time.Second)
@@ -223,6 +288,21 @@ func (m *Model) activeMessage() string {
 	}
 
 	return ""
+}
+
+// refreshStatus renders the animated update progress shown while the station
+// list is being downloaded.
+func (m *Model) refreshStatus() string {
+	frame := refreshSpinner[m.refreshFrame%len(refreshSpinner)]
+	status := "Updating station list... " + frame
+
+	if !m.refreshStarted.IsZero() {
+		if elapsed := time.Since(m.refreshStarted); elapsed >= time.Second {
+			status += fmt.Sprintf(" %ds", int(elapsed.Seconds()))
+		}
+	}
+
+	return status
 }
 
 func (m *Model) playStation(s station.Station) {
@@ -403,6 +483,14 @@ func (m *Model) updateSearch() {
 
 func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 	token := msg.String()
+
+	if m.refreshing {
+		if token == "ctrl+c" {
+			m.cancelRefresh()
+		}
+
+		return nil
+	}
 
 	if cmd, ok := globalKeyMap[token]; ok {
 		return m.execute(cmd)
@@ -784,6 +872,12 @@ func (m *Model) footerLines(width, leftWidth, count int) []string {
 
 	lines[0] = footerSeparatorLine(leftWidth, width)
 	if count < 2 {
+		return lines
+	}
+
+	if m.refreshing {
+		lines[1] = style(ansiCyan, padRight(m.refreshStatus(), width))
+
 		return lines
 	}
 

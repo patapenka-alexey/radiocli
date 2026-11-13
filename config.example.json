@@ -61,5 +61,6 @@
       "url": "https://stream.rusradio.by:8443/live128"
     }
   ],
-  "mpv_path": "mpv"
+  "mpv_path": "mpv",
+  "update_timeout": 30
 }

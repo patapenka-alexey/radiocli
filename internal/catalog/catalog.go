@@ -3,6 +3,7 @@
 package catalog
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -48,7 +49,12 @@ type Options struct {
 	Client    HTTPDoer
 	Retry     RetryPolicy
 	UserAgent string
+	Timeout   time.Duration
 }
+
+// DefaultTimeout bounds a full refresh operation, including retries and
+// mirror failover.
+const DefaultTimeout = 30 * time.Second
 
 // StatusError is returned for non-2xx responses.
 type StatusError struct {
@@ -114,6 +120,7 @@ type Repository struct {
 	client    HTTPDoer
 	retry     RetryPolicy
 	userAgent string
+	timeout   time.Duration
 	sleep     func(time.Duration)
 }
 
@@ -141,6 +148,9 @@ func New(opts Options) *Repository {
 	if opts.Retry.MaxDelay <= 0 {
 		opts.Retry.MaxDelay = defaultRetryPolicy.MaxDelay
 	}
+	if opts.Timeout <= 0 {
+		opts.Timeout = DefaultTimeout
+	}
 
 	return &Repository{
 		path:      opts.Path,
@@ -148,6 +158,7 @@ func New(opts Options) *Repository {
 		client:    opts.Client,
 		retry:     opts.Retry,
 		userAgent: opts.UserAgent,
+		timeout:   opts.Timeout,
 		sleep:     time.Sleep,
 	}
 }
@@ -155,7 +166,12 @@ func New(opts Options) *Repository {
 // Load loads the cached station list. It never performs a network request;
 // call Refresh to download the current list.
 func Load() *Repository {
-	db := New(Options{})
+	return LoadWithOptions(Options{})
+}
+
+// LoadWithOptions loads the cached station list with custom options.
+func LoadWithOptions(opts Options) *Repository {
+	db := New(opts)
 	db.loadCache()
 
 	return db
@@ -183,19 +199,45 @@ func (db *Repository) loadCache() {
 }
 
 // Refresh downloads the full station list, applies the same filtering and
-// deduplication the applet does, then writes it to the cache.
+// deduplication the applet does, then writes it to the cache. The whole
+// operation is bounded by Options.Timeout, including backoff between attempts.
 func (db *Repository) Refresh() error {
+	return db.RefreshContext(context.Background())
+}
+
+// RefreshContext is Refresh with a caller-supplied parent context, so callers
+// can cancel an in-progress update. Options.Timeout still bounds the operation.
+func (db *Repository) RefreshContext(parent context.Context) error {
+	timeout := db.timeout
+	if timeout <= 0 {
+		timeout = DefaultTimeout
+	}
+
+	ctx, cancel := context.WithTimeout(parent, timeout)
+	defer cancel()
+
 	var lastErr error
 	attempts := 0
 
+rounds:
 	for round := 0; round < db.retry.Attempts; round++ {
 		for _, url := range db.mirrors {
+			if err := ctx.Err(); err != nil {
+				lastErr = err
+
+				break rounds
+			}
+
 			if attempts > 0 {
-				db.sleep(db.backoff(attempts))
+				if err := db.wait(ctx, db.backoff(attempts)); err != nil {
+					lastErr = err
+
+					break rounds
+				}
 			}
 			attempts++
 
-			entries, err := db.fetch(url)
+			entries, err := db.fetch(ctx, url)
 			if err != nil {
 				lastErr = err
 				continue
@@ -214,6 +256,10 @@ func (db *Repository) Refresh() error {
 		}
 	}
 
+	if err := ctx.Err(); err != nil {
+		lastErr = err
+	}
+
 	if lastErr == nil {
 		lastErr = errors.New("no mirrors configured")
 	}
@@ -225,6 +271,23 @@ func (db *Repository) Refresh() error {
 	db.mu.Unlock()
 
 	return err
+}
+
+// wait sleeps for delay unless the operation deadline arrives first.
+func (db *Repository) wait(ctx context.Context, delay time.Duration) error {
+	if deadline, ok := ctx.Deadline(); ok {
+		remaining := time.Until(deadline)
+		if remaining <= 0 {
+			return ctx.Err()
+		}
+		if delay > remaining {
+			delay = remaining
+		}
+	}
+
+	db.sleep(delay)
+
+	return ctx.Err()
 }
 
 func (db *Repository) backoff(attempt int) time.Duration {
@@ -247,8 +310,8 @@ func (db *Repository) backoff(attempt int) time.Duration {
 	return half + time.Duration(rand.Int64N(int64(half)+1))
 }
 
-func (db *Repository) fetch(url string) ([]station.Station, error) {
-	entries, err := db.doFetch(url)
+func (db *Repository) fetch(ctx context.Context, url string) ([]station.Station, error) {
+	entries, err := db.doFetch(ctx, url)
 	if err != nil {
 		return nil, &FetchError{URL: url, Err: err}
 	}
@@ -256,8 +319,8 @@ func (db *Repository) fetch(url string) ([]station.Station, error) {
 	return entries, nil
 }
 
-func (db *Repository) doFetch(url string) ([]station.Station, error) {
-	req, err := http.NewRequest(http.MethodGet, url, nil)
+func (db *Repository) doFetch(ctx context.Context, url string) ([]station.Station, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return nil, err
 	}

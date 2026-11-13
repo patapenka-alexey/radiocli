@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"radiocli/internal/paths"
 	"radiocli/internal/ports"
@@ -15,6 +16,9 @@ import (
 )
 
 var _ ports.StationStore = (*Store)(nil)
+
+// DefaultUpdateTimeout is how long a station list update may take.
+const DefaultUpdateTimeout = 30 * time.Second
 
 func defaultStations() []station.Station {
 	return []station.Station{
@@ -38,8 +42,9 @@ func defaultStations() []station.Station {
 
 // Store mirrors the JSON file stored at ~/.config/radiocli/config.json.
 type Store struct {
-	stations []station.Station
-	mpvPath  string
+	stations      []station.Station
+	mpvPath       string
+	updateTimeout time.Duration
 
 	path string
 }
@@ -48,18 +53,27 @@ type Store struct {
 // defaults only when the file is missing, unreadable or has no stations key.
 func Load() *Store {
 	path := paths.ConfigPath()
-	cfg := &Store{mpvPath: "mpv", path: path}
+	cfg := &Store{mpvPath: "mpv", updateTimeout: DefaultUpdateTimeout, path: path}
 
 	if data, err := os.ReadFile(path); err == nil {
 		var raw struct {
-			Stations []station.Station `json:"stations"`
-			MpvPath  *string           `json:"mpv_path"`
+			Stations      []station.Station `json:"stations"`
+			MpvPath       *string           `json:"mpv_path"`
+			UpdateTimeout json.RawMessage   `json:"update_timeout"`
+			Timeout       json.RawMessage   `json:"timeout"`
 		}
 
 		if json.Unmarshal(data, &raw) == nil {
 			cfg.stations = raw.Stations
 			if raw.MpvPath != nil && *raw.MpvPath != "" {
 				cfg.mpvPath = *raw.MpvPath
+			}
+			timeout := raw.UpdateTimeout
+			if len(timeout) == 0 {
+				timeout = raw.Timeout
+			}
+			if value, ok := parseTimeout(timeout); ok {
+				cfg.updateTimeout = value
 			}
 		}
 	}
@@ -71,6 +85,36 @@ func Load() *Store {
 	return cfg
 }
 
+// parseTimeout accepts either a number of seconds or a duration string such as
+// "30s" or "1m". Missing, invalid and non-positive values are ignored so the
+// caller keeps the default.
+func parseTimeout(raw json.RawMessage) (time.Duration, bool) {
+	if len(raw) == 0 {
+		return 0, false
+	}
+
+	var seconds float64
+	if err := json.Unmarshal(raw, &seconds); err == nil {
+		if seconds <= 0 {
+			return 0, false
+		}
+
+		return time.Duration(seconds * float64(time.Second)), true
+	}
+
+	var text string
+	if err := json.Unmarshal(raw, &text); err == nil {
+		timeout, err := time.ParseDuration(strings.TrimSpace(text))
+		if err != nil || timeout <= 0 {
+			return 0, false
+		}
+
+		return timeout, true
+	}
+
+	return 0, false
+}
+
 // Stations returns a copy of the configured station list.
 func (c *Store) Stations() []station.Station {
 	return append([]station.Station(nil), c.stations...)
@@ -79,6 +123,11 @@ func (c *Store) Stations() []station.Station {
 // MpvPath returns the configured mpv executable.
 func (c *Store) MpvPath() string {
 	return c.mpvPath
+}
+
+// UpdateTimeout returns the maximum duration of a station list update.
+func (c *Store) UpdateTimeout() time.Duration {
+	return c.updateTimeout
 }
 
 // AddStation appends a station, enforcing the same uniqueness rules as the
@@ -143,9 +192,14 @@ func (c *Store) Save() error {
 	}
 
 	file := struct {
-		Stations []station.Station `json:"stations"`
-		MpvPath  string            `json:"mpv_path"`
-	}{Stations: stations, MpvPath: c.mpvPath}
+		Stations      []station.Station `json:"stations"`
+		MpvPath       string            `json:"mpv_path"`
+		UpdateTimeout float64           `json:"update_timeout"`
+	}{
+		Stations:      stations,
+		MpvPath:       c.mpvPath,
+		UpdateTimeout: c.updateTimeout.Seconds(),
+	}
 
 	if err := enc.Encode(file); err != nil {
 		f.Close()

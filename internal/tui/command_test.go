@@ -1,6 +1,8 @@
 package tui
 
 import (
+	"errors"
+	"strings"
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
@@ -172,5 +174,80 @@ func TestArrowAndSpaceBindings(t *testing.T) {
 	m.handleKey(tea.KeyPressMsg{Code: tea.KeyUp})
 	if m.stationIndex != 0 {
 		t.Fatalf("stationIndex = %d, want 0", m.stationIndex)
+	}
+}
+
+func TestHotkeysBlockedWhileRefreshing(t *testing.T) {
+	m := newTestModel(2)
+	m.state = stateSearch
+	m.startRefresh()
+
+	m.handleKey(press("a"))
+	if m.searchQuery != "" {
+		t.Fatalf("searchQuery = %q, want empty while refreshing", m.searchQuery)
+	}
+
+	m.handleKey(press("q"))
+	if m.state != stateSearch {
+		t.Fatalf("state = %v, want stateSearch while refreshing", m.state)
+	}
+	if !m.refreshing {
+		t.Fatal("refreshing = false, want true")
+	}
+}
+
+func TestCtrlCCancelsRefresh(t *testing.T) {
+	m := newTestModel(2)
+	m.startRefresh()
+	id := m.refreshID
+
+	m.handleKey(pressCtrl('c'))
+
+	if m.refreshing {
+		t.Fatal("refreshing = true after Ctrl+C")
+	}
+	if m.refreshCancel != nil {
+		t.Fatal("refreshCancel was not released")
+	}
+	if !strings.Contains(m.message, "Update cancelled") {
+		t.Fatalf("message = %q, want cancellation notice", m.message)
+	}
+
+	m.update(stationsRefreshedMsg{id: id, err: errors.New("cancelled")})
+	if strings.Contains(m.message, "failed") {
+		t.Fatalf("stale result changed the message: %q", m.message)
+	}
+
+	m.handleKey(pressCtrl('c'))
+	if m.state != stateConfirmQuit {
+		t.Fatalf("state = %v, want stateConfirmQuit after refresh cancellation", m.state)
+	}
+}
+
+func TestRefreshShowsProgressAndStopsTicking(t *testing.T) {
+	m := newTestModel(1)
+	m.startRefresh()
+
+	if !m.refreshing {
+		t.Fatal("refreshing = false, want true")
+	}
+	if !strings.Contains(m.footerLines(80, 40, 2)[1], "Updating station list") {
+		t.Fatalf("footer = %q, want update progress", m.footerLines(80, 40, 2)[1])
+	}
+
+	first := m.refreshStatus()
+	if cmd := m.update(refreshTickMsg{}); cmd == nil {
+		t.Fatal("refresh tick returned nil while refreshing")
+	}
+	if m.refreshStatus() == first {
+		t.Fatal("refresh progress did not advance")
+	}
+
+	m.update(stationsRefreshedMsg{})
+	if m.refreshing {
+		t.Fatal("refreshing = true after completion")
+	}
+	if cmd := m.update(refreshTickMsg{}); cmd != nil {
+		t.Fatal("refresh tick still scheduled after completion")
 	}
 }

@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 func TestSaveLoadRoundTrip(t *testing.T) {
@@ -113,5 +114,70 @@ func TestRemoveStation(t *testing.T) {
 		if s.Name == name {
 			t.Fatalf("station %q still present after removal", name)
 		}
+	}
+}
+
+func TestUpdateTimeoutDefaultsToThirtySeconds(t *testing.T) {
+	t.Setenv("RADIOCLI_CONFIG", filepath.Join(t.TempDir(), "config.json"))
+
+	if got := Load().UpdateTimeout(); got != 30*time.Second {
+		t.Fatalf("UpdateTimeout() = %v, want 30s", got)
+	}
+}
+
+func TestUpdateTimeoutFromNumber(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.json")
+	t.Setenv("RADIOCLI_CONFIG", path)
+
+	if err := os.WriteFile(path, []byte(`{"update_timeout":3}`), 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	if got := Load().UpdateTimeout(); got != 3*time.Second {
+		t.Fatalf("UpdateTimeout() = %v, want 3s", got)
+	}
+}
+
+func TestUpdateTimeoutFromDurationString(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.json")
+	t.Setenv("RADIOCLI_CONFIG", path)
+
+	if err := os.WriteFile(path, []byte(`{"update_timeout":"2s"}`), 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	if got := Load().UpdateTimeout(); got != 2*time.Second {
+		t.Fatalf("UpdateTimeout() = %v, want 2s", got)
+	}
+}
+
+func TestUpdateTimeoutInvalidFallsBackToDefault(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.json")
+	t.Setenv("RADIOCLI_CONFIG", path)
+
+	if err := os.WriteFile(path, []byte(`{"update_timeout":0}`), 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	if got := Load().UpdateTimeout(); got != DefaultUpdateTimeout {
+		t.Fatalf("UpdateTimeout() = %v, want default", got)
+	}
+}
+
+func TestSavePreservesUpdateTimeout(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.json")
+	t.Setenv("RADIOCLI_CONFIG", path)
+
+	if err := os.WriteFile(path, []byte(`{"update_timeout":"4s"}`), 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	cfg := Load()
+	if err := cfg.Save(); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+
+	if got := Load().UpdateTimeout(); got != 4*time.Second {
+		t.Fatalf("UpdateTimeout() after reload = %v, want 4s", got)
 	}
 }

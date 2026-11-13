@@ -22,7 +22,7 @@ type Deps struct {
 // Build constructs the application dependencies.
 func Build() (*Deps, error) {
 	config := config.Load()
-	catalog := catalog.Load()
+	catalog := catalog.LoadWithOptions(catalog.Options{Timeout: config.UpdateTimeout()})
 
 	player, err := player.New(config.MpvPath())
 	if err != nil {

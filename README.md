@@ -102,11 +102,14 @@ The file is only written when you add (`Ctrl+A` while searching) or delete
   "stations": [
     { "name": "Smooth Chill", "url": "https://media-ssl.musicradio.com/ChillMP3" }
   ],
-  "mpv_path": "mpv"
+  "mpv_path": "mpv",
+  "update_timeout": 30
 }
 ```
 
-To point the client at a different mpv binary, change `mpv_path`.
+To point the client at a different mpv binary, change `mpv_path`. The
+`update_timeout` option bounds how long a station-list update may take, in
+seconds (30 by default); it also accepts a duration string such as `"30s"`.
 
 Playback volume is controlled by the system mixer; use your desktop's volume
 keys or mixer applet.
@@ -117,8 +120,10 @@ Search uses a station list fetched directly from the
 [radio-browser.info](https://www.radio-browser.info) API - the same source the
 Cinnamon applet queries when you press "Update Radio Stationlist". The list is
 downloaded on first run (and whenever you press `Ctrl+U` while searching),
-then cached so search works offline. Mirror hosts are tried with
-exponential backoff if the first one is unavailable.
+then cached so search works offline. While the update runs, the footer shows
+animated progress and other hotkeys are ignored (`Ctrl+C` cancels the update).
+Mirror hosts are tried with exponential backoff if the first one is
+unavailable, and the whole operation is limited by `update_timeout`.
 
 The cache lives at `~/.config/radiocli/allStations.json` (following
 `$XDG_CONFIG_HOME`), next to `config.json`. Set `RADIOCLI_DB` to use a

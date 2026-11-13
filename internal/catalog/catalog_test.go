@@ -1,6 +1,7 @@
 package catalog
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net/http"
@@ -215,5 +216,59 @@ func TestBackoffBounds(t *testing.T) {
 		if delay < 50*time.Millisecond || delay > 150*time.Millisecond {
 			t.Fatalf("attempt %d: delay = %v, want within [50ms, 150ms]", attempt, delay)
 		}
+	}
+}
+
+func TestRefreshHonoursTimeout(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		<-r.Context().Done()
+	}))
+	defer server.Close()
+
+	repo := newTestRepo(t, Options{
+		Mirrors: []string{server.URL},
+		Retry:   RetryPolicy{Attempts: 1},
+		Timeout: 50 * time.Millisecond,
+		Client:  server.Client(),
+	})
+
+	start := time.Now()
+	err := repo.Refresh()
+
+	if !errors.Is(err, ErrFetch) {
+		t.Fatalf("error = %v, want ErrFetch", err)
+	}
+	if elapsed := time.Since(start); elapsed > time.Second {
+		t.Fatalf("Refresh took %v, want it bounded by the timeout", elapsed)
+	}
+}
+
+func TestRefreshContextCancellation(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		<-r.Context().Done()
+	}))
+	defer server.Close()
+
+	repo := newTestRepo(t, Options{
+		Mirrors: []string{server.URL},
+		Retry:   RetryPolicy{Attempts: 1},
+		Timeout: 5 * time.Second,
+		Client:  server.Client(),
+	})
+
+	ctx, cancel := context.WithCancel(context.Background())
+	go func() {
+		time.Sleep(20 * time.Millisecond)
+		cancel()
+	}()
+
+	start := time.Now()
+	err := repo.RefreshContext(ctx)
+
+	if !errors.Is(err, ErrFetch) {
+		t.Fatalf("error = %v, want ErrFetch", err)
+	}
+	if elapsed := time.Since(start); elapsed > time.Second {
+		t.Fatalf("RefreshContext took %v after cancellation", elapsed)
 	}
 }

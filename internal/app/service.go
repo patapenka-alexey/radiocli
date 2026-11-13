@@ -3,11 +3,16 @@
 package app
 
 import (
+	"context"
 	"errors"
 
 	"radiocli/internal/ports"
 	"radiocli/internal/station"
 )
+
+type contextRefresher interface {
+	RefreshContext(context.Context) error
+}
 
 // ErrPlayerNotRunning is returned when playback is requested while mpv is gone.
 var ErrPlayerNotRunning = errors.New("mpv is not running")
@@ -57,6 +62,16 @@ func (s *Service) Search(query string, limit int) []station.Station {
 
 // Refresh re-downloads the station catalog.
 func (s *Service) Refresh() error {
+	return s.catalog.Refresh()
+}
+
+// RefreshContext re-downloads the catalog and stops early when ctx is canceled.
+// Catalogs that do not support context cancellation fall back to Refresh.
+func (s *Service) RefreshContext(ctx context.Context) error {
+	if refresher, ok := s.catalog.(contextRefresher); ok {
+		return refresher.RefreshContext(ctx)
+	}
+
 	return s.catalog.Refresh()
 }
 
